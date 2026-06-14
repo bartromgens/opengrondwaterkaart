@@ -7,14 +7,25 @@ from django.db import models
 from django.core.management.base import BaseCommand
 from django.utils import timezone as django_timezone
 
-from api.models import IngestRun, IngestRunStatus, PeriodType, Well, WellBaseline
-from api.management.commands.fetch_measurements import (
-    TokenBucket,
-    _fetch_gld,
-)  # noqa: E402
+from api.management.dev_bbox import filter_wells_by_dev_bbox, write_dev_bbox_notice
+from api.models import (
+    IngestRun,
+    IngestRunStatus,
+    Measurement,
+    PeriodType,
+    Well,
+    WellBaseline,
+)
 
-GLD_BASE_URL = "https://publiek.broservices.nl/gm/gld/v1/objects"
 PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
+
+
+def _load_observations_from_db(well: Well) -> list[tuple[datetime, float, str]]:
+    return list(
+        Measurement.objects.filter(well=well)
+        .order_by("measured_at")
+        .values_list("measured_at", "value_m_nap", "quality")
+    )
 
 
 def _compute_and_save_baselines(
@@ -102,8 +113,8 @@ def _compute_and_save_baselines(
 
 class Command(BaseCommand):
     help = (
-        "Compute per-well seasonal baseline percentiles from full BRO history. "
-        "Run once initially, then monthly."
+        "Compute per-well seasonal baseline percentiles from BRO history or stored "
+        "measurements. Run once initially, then monthly."
     )
 
     def add_arguments(self, parser: Any) -> None:
@@ -124,24 +135,37 @@ class Command(BaseCommand):
             action="store_true",
             help="Skip wells that already have baselines.",
         )
+        parser.add_argument(
+            "--from-db",
+            action="store_true",
+            help="Use stored Measurement rows instead of fetching from the BRO API.",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         run = IngestRun.objects.create(kind="compute_baselines")
         errors: list[str] = []
-        rate = getattr(settings, "BRO_RATE_LIMIT_RPS", 3)
         min_years = getattr(settings, "SGI_MIN_YEARS", 8)
-        bucket = TokenBucket(rate)
         period_type = options["period_type"]
         limit = options["limit"]
         skip_existing = options["skip_existing"]
+        from_db = options["from_db"]
         processed = 0
+        bucket = None
+        if not from_db:
+            from api.management.commands.fetch_measurements import (  # noqa: E402
+                TokenBucket,
+                _fetch_gld,
+            )
+
+            rate = getattr(settings, "BRO_RATE_LIMIT_RPS", 3)
+            bucket = TokenBucket(rate)
 
         inactive_days = getattr(settings, "INACTIVE_WELL_DAYS", 365)
         cutoff = (
             django_timezone.now() - django_timezone.timedelta(days=inactive_days)
         ).date()
 
-        wells = (
+        wells = filter_wells_by_dev_bbox(
             Well.objects.filter(gld_bro_id__gt="")
             .filter(
                 models.Q(research_last_date__isnull=True)
@@ -149,6 +173,7 @@ class Command(BaseCommand):
             )
             .order_by("id")
         )
+        write_dev_bbox_notice(self.stdout)
         if skip_existing:
             wells_with_baselines = (
                 WellBaseline.objects.filter(period_type=period_type)
@@ -156,12 +181,15 @@ class Command(BaseCommand):
                 .distinct()
             )
             wells = wells.exclude(id__in=wells_with_baselines)
+        if from_db:
+            wells = wells.filter(measurements__isnull=False).distinct()
         if limit:
             wells = wells[:limit]
 
         total = wells.count()
+        source = "database" if from_db else "BRO API"
         self.stdout.write(
-            f"Computing {period_type} baselines for {total} wells "
+            f"Computing {period_type} baselines for {total} wells from {source} "
             f"(min {min_years} samples/period)..."
         )
 
@@ -169,8 +197,12 @@ class Command(BaseCommand):
             if not well.gld_bro_id:
                 continue
             try:
-                # Fetch full history (no date filter) to compute the baseline
-                observations = _fetch_gld(well.gld_bro_id, since=None, bucket=bucket)
+                if from_db:
+                    observations = _load_observations_from_db(well)
+                else:
+                    observations = _fetch_gld(
+                        well.gld_bro_id, since=None, bucket=bucket
+                    )
                 saved = _compute_and_save_baselines(
                     well, observations, period_type, min_years
                 )

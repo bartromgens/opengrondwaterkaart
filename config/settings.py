@@ -79,10 +79,16 @@ MEASUREMENT_RETENTION_DAYS = 365
 STALE_THRESHOLD_DAYS = 35
 
 # BRO GLD REST API rate limit (requests per second)
-BRO_RATE_LIMIT_RPS = 3
+BRO_RATE_LIMIT_RPS = 2
+
+# Parallel BRO API workers (shared rate-limited bucket)
+BRO_PARALLEL_WORKERS = 2
 
 # Skip wells whose last observation is older than this many days
 INACTIVE_WELL_DAYS = 365
+
+# Optional minx,miny,maxx,maxy (WGS84) to limit ingest commands during local dev.
+DEV_WELL_BBOX: tuple[float, float, float, float] | None = None
 
 AUTH_PASSWORD_VALIDATORS = [
     {

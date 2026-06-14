@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone as django_timezone
 
+from api.management.dev_bbox import filter_by_well_dev_bbox, write_dev_bbox_notice
 from api.models import (
     Classification,
     IngestRun,
@@ -79,15 +80,16 @@ class Command(BaseCommand):
         now = django_timezone.now()
         processed = 0
 
-        statuses = (
-            WellStatus.objects.select_related("well")
-            .filter(latest_value_m_nap__isnull=False)
-            .iterator(chunk_size=500)
+        statuses = filter_by_well_dev_bbox(
+            WellStatus.objects.select_related("well").filter(
+                latest_value_m_nap__isnull=False
+            )
         )
+        write_dev_bbox_notice(self.stdout)
 
         to_update: list[WellStatus] = []
 
-        for status in statuses:
+        for status in statuses.iterator(chunk_size=500):
             try:
                 if not status.latest_measured_at:
                     continue

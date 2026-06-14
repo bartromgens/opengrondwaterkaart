@@ -9,6 +9,7 @@ from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand
 from django.utils import timezone as django_timezone
 
+from api.management.dev_bbox import point_in_dev_bbox, write_dev_bbox_notice
 from api.models import IngestRun, IngestRunStatus, Well
 
 ATOM_URL = (
@@ -98,6 +99,7 @@ class Command(BaseCommand):
         existing = {w.bro_id: w for w in Well.objects.only("bro_id", "id")}
 
         total = len(src)
+        write_dev_bbox_notice(self.stdout)
         self.stdout.write(f"Processing {total} features...")
 
         for i, feature in enumerate(src):
@@ -114,6 +116,9 @@ class Command(BaseCommand):
                     continue
 
                 lon, lat = geom["coordinates"][:2]
+                if not point_in_dev_bbox(lon, lat):
+                    continue
+
                 point = Point(lon, lat, srid=4326)
 
                 tube_number = int(

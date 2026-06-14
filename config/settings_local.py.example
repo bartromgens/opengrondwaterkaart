@@ -12,3 +12,6 @@ DATABASES = {
         "PORT": "5436",
     }
 }
+
+# Limit ingest commands to gemeente Utrecht for faster local testing.
+DEV_WELL_BBOX = (4.97, 51.97, 5.22, 52.15)

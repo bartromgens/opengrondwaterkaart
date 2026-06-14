@@ -46,7 +46,10 @@ def _well_feature(well: Well) -> dict:
 
 @api_view(["GET"])
 def wells_geojson(request: Request) -> Response:
-    qs = Well.objects.prefetch_related("status")
+    one_year_ago = (timezone.now() - timedelta(days=365)).date()
+    qs = Well.objects.filter(research_last_date__gte=one_year_ago).prefetch_related(
+        "status"
+    )
 
     bbox_param = request.query_params.get("bbox")
     if bbox_param:

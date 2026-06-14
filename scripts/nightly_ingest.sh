@@ -14,7 +14,7 @@ cd "$PROJECT_DIR"
 
 echo "[$(date -Iseconds)] Starting nightly ingest"
 python manage.py bootstrap_wells
-python manage.py link_gld_ids --skip-existing
+python manage.py link_gld_ids
 python manage.py fetch_measurements
 python manage.py refresh_status
 python manage.py purge_old_measurements
