@@ -47,8 +47,7 @@ class WellStatusAdmin(admin.ModelAdmin):
 
 @admin.register(Measurement)
 class MeasurementAdmin(admin.ModelAdmin):
-    list_display = ("well", "measured_at", "value_m_nap", "quality")
-    list_filter = ("quality",)
+    list_display = ("well", "measured_on", "value_m_nap")
     search_fields = ("well__bro_id",)
 
 

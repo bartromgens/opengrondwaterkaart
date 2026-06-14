@@ -165,13 +165,15 @@ def well_series(request: Request, bro_id: str) -> Response:
 
     measurements = (
         Measurement.objects.filter(
-            well=well, measured_at__gte=from_dt, measured_at__lte=to_dt
+            well=well,
+            measured_on__gte=from_dt.date(),
+            measured_on__lte=to_dt.date(),
         )
-        .order_by("measured_at")
-        .values_list("measured_at", "value_m_nap")
+        .order_by("measured_on")
+        .values_list("measured_on", "value_m_nap")
     )
 
-    series = [{"t": ts.isoformat(), "v": v} for ts, v in measurements]
+    series = [{"t": d.isoformat(), "v": v} for d, v in measurements]
 
     baseline = _weekly_baseline(well, status)
 

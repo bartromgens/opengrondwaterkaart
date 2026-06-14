@@ -18,7 +18,7 @@ class Command(BaseCommand):
         cutoff = django_timezone.now() - timedelta(days=retention_days)
 
         measurements = filter_by_well_dev_bbox(
-            Measurement.objects.filter(measured_at__lt=cutoff)
+            Measurement.objects.filter(measured_on__lt=cutoff.date())
         )
         write_dev_bbox_notice(self.stdout)
 

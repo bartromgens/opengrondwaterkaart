@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date
 from typing import Any
 
 import numpy as np
@@ -20,26 +20,25 @@ from api.models import (
 PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
 
 
-def _load_observations_from_db(well: Well) -> list[tuple[datetime, float, str]]:
+def _load_observations_from_db(well: Well) -> list[tuple[date, float]]:
     return list(
         Measurement.objects.filter(well=well)
-        .order_by("measured_at")
-        .values_list("measured_at", "value_m_nap", "quality")
+        .order_by("measured_on")
+        .values_list("measured_on", "value_m_nap")
     )
 
 
 def _compute_and_save_baselines(
     well: Well,
-    observations: list[tuple[datetime, float, str]],
+    observations: list[tuple[date, float]],
     period_type: str,
     min_years: int,
 ) -> int:
-    """Compute per-period percentile baselines for one well. Returns number saved."""
     if not observations:
         return 0
 
-    all_dates = [ts.date() for ts, _, _ in observations]
-    values = [v for _, v, _ in observations]
+    all_dates = [d for d, _ in observations]
+    values = [v for _, v in observations]
 
     baseline_start = min(all_dates)
     baseline_end = max(all_dates)
@@ -160,6 +159,7 @@ class Command(BaseCommand):
         if not from_db:
             from api.management.commands.fetch_measurements import (  # noqa: E402
                 TokenBucket,
+                _aggregate_daily,
                 _fetch_gld,
             )
 
@@ -206,8 +206,8 @@ class Command(BaseCommand):
                 if from_db:
                     observations = _load_observations_from_db(well)
                 else:
-                    observations = _fetch_gld(
-                        well.gld_bro_id, since=None, bucket=bucket
+                    observations = _aggregate_daily(
+                        _fetch_gld(well.gld_bro_id, since=None, bucket=bucket)
                     )
                 saved = _compute_and_save_baselines(
                     well, observations, period_type, min_years

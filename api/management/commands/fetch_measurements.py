@@ -2,9 +2,10 @@ import logging
 import threading
 import time
 import xml.etree.ElementTree as ET
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Iterator
 
 import requests
@@ -225,27 +226,35 @@ def _fetch_gld(
     return _fetch_gld_per_observation(gld_bro_id, since, bucket)
 
 
-def _upsert_measurements(
-    well: Well, observations: list[tuple[datetime, float, str]]
-) -> None:
-    if not observations:
+def _aggregate_daily(
+    observations: list[tuple[datetime, float, str]],
+) -> list[tuple[date, float]]:
+    day_values: dict[date, list[float]] = defaultdict(list)
+    for ts, val, quality in observations:
+        if quality == "afgekeurd":
+            continue
+        day_values[ts.date()].append(val)
+    return sorted([(d, sum(vals) / len(vals)) for d, vals in day_values.items()])
+
+
+def _upsert_measurements(well: Well, daily_obs: list[tuple[date, float]]) -> None:
+    if not daily_obs:
         return
-    min_ts = min(ts for ts, _, _ in observations)
-    max_ts = max(ts for ts, _, _ in observations)
-    existing_times = set(
+    dates = [d for d, _ in daily_obs]
+    existing_dates = set(
         Measurement.objects.filter(
             well=well,
-            measured_at__gte=min_ts,
-            measured_at__lte=max_ts,
-        ).values_list("measured_at", flat=True)
+            measured_on__gte=min(dates),
+            measured_on__lte=max(dates),
+        ).values_list("measured_on", flat=True)
     )
-    new_obs = [
-        Measurement(well=well, measured_at=ts, value_m_nap=val, quality=quality)
-        for ts, val, quality in observations
-        if ts not in existing_times
+    new_rows = [
+        Measurement(well=well, measured_on=d, value_m_nap=val)
+        for d, val in daily_obs
+        if d not in existing_dates
     ]
-    if new_obs:
-        Measurement.objects.bulk_create(new_obs, ignore_conflicts=True)
+    if new_rows:
+        Measurement.objects.bulk_create(new_rows, ignore_conflicts=True)
 
 
 @dataclass
@@ -323,12 +332,19 @@ def _apply_fetch_result(
     now: datetime,
     stale_days: int,
 ) -> None:
-    _upsert_measurements(result.well, result.observations)
+    daily_obs = _aggregate_daily(result.observations)
+    _upsert_measurements(result.well, daily_obs)
     status.last_fetched_at = now
-    if result.observations:
-        latest_ts, latest_val, _ = max(result.observations, key=lambda x: x[0])
-        if status.latest_measured_at is None or latest_ts > status.latest_measured_at:
-            status.latest_measured_at = latest_ts
+    if daily_obs:
+        latest_date, latest_val = max(daily_obs, key=lambda x: x[0])
+        latest_dt = datetime(
+            latest_date.year,
+            latest_date.month,
+            latest_date.day,
+            tzinfo=now.tzinfo,
+        )
+        if status.latest_measured_at is None or latest_dt > status.latest_measured_at:
+            status.latest_measured_at = latest_dt
             status.latest_value_m_nap = latest_val
 
     if status.latest_measured_at:

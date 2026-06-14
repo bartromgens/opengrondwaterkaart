@@ -29,20 +29,19 @@ class Measurement(models.Model):
     well = models.ForeignKey(
         Well, on_delete=models.CASCADE, related_name="measurements", db_index=True
     )
-    measured_at = models.DateTimeField(db_index=True)
+    measured_on = models.DateField(db_index=True)
     value_m_nap = models.FloatField()
-    quality = models.CharField(max_length=40, blank=True)
 
     class Meta:
         constraints = [
             UniqueConstraint(
-                fields=["well", "measured_at"], name="unique_well_measured_at"
+                fields=["well", "measured_on"], name="unique_well_measured_on"
             )
         ]
-        indexes = [models.Index(fields=["well", "measured_at"])]
+        indexes = [models.Index(fields=["well", "measured_on"])]
 
     def __str__(self) -> str:
-        return f"{self.well_id} @ {self.measured_at}"
+        return f"{self.well_id} @ {self.measured_on}"
 
 
 class PeriodType(models.TextChoices):
