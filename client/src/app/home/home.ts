@@ -138,6 +138,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.wellsService.getWellDetail(broId).subscribe({
       next: (detail) => {
         this.selectedWell.set(detail);
+        this.showChart.set(true);
         this.loadSeries(broId);
       },
     });
@@ -211,10 +212,6 @@ export class HomeComponent implements OnInit, OnDestroy {
       else ctx.lineTo(toX(i), toY(p.v));
     });
     ctx.stroke();
-  }
-
-  openDetailChart(): void {
-    this.showChart.set(true);
   }
 
   closeChart(): void {

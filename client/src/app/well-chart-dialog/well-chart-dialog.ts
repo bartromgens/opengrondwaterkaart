@@ -90,7 +90,9 @@ export class WellChartComponent implements OnInit, OnChanges {
     );
 
     const GAP_THRESHOLD_MS = 45 * 24 * 60 * 60 * 1000;
-    const raw: [number, number][] = series.series.map((p) => [new Date(p.t).getTime(), p.v]);
+    const raw: [number, number][] = series.series
+      .map((p): [number, number] => [new Date(p.t).getTime(), p.v])
+      .sort((a, b) => a[0] - b[0]);
 
     const measurements: ([number, number] | [number, null])[] = [];
     for (let i = 0; i < raw.length; i++) {
@@ -162,7 +164,7 @@ export class WellChartComponent implements OnInit, OnChanges {
       },
       xAxis: {
         type: 'time',
-        min: raw.length > 0 ? raw[0][0] : undefined,
+        min: raw.length > 0 ? (() => { const d = new Date(raw[0][0]); d.setUTCHours(0,0,0,0); return d.getTime(); })() : undefined,
         max: now,
         axisLabel: { fontSize: 11 },
       },
