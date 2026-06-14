@@ -1,0 +1,26 @@
+<div class="chart-panel">
+  <div class="panel-header">
+    <div class="panel-title">
+      <span class="bro-id">{{ well().bro_id }}</span>
+      @if (well().nitg_code) {
+        <span class="nitg-code">{{ well().nitg_code }}</span>
+      }
+    </div>
+    <button class="close-btn" (click)="close()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  <div class="chart-body">
+    @if (loading()) {
+      <div class="loading-state">
+        <mat-spinner diameter="36" />
+        <span>Tijdreeks laden…</span>
+      </div>
+    } @else if (chartOption()) {
+      <div echarts [options]="chartOption()!" class="echart"></div>
+    } @else {
+      <p class="no-data">Geen meetdata beschikbaar.</p>
+    }
+  </div>
+</div>

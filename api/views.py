@@ -145,37 +145,50 @@ def well_series(request: Request, bro_id: str) -> Response:
         return Response({"error": "Well not found."}, status=404)
 
     status = getattr(well, "status", None)
+    full = request.query_params.get("full", "")
     now = timezone.now()
-    from_dt = now - timedelta(days=365)
-    to_dt = now
 
-    from_param = request.query_params.get("from")
-    to_param = request.query_params.get("to")
-    try:
-        if from_param:
-            from_dt = timezone.datetime.fromisoformat(from_param).replace(
-                tzinfo=timezone.utc
-            )
-        if to_param:
-            to_dt = timezone.datetime.fromisoformat(to_param).replace(
-                tzinfo=timezone.utc
-            )
-    except ValueError:
-        return Response({"error": "Invalid date format. Use ISO 8601."}, status=400)
+    if full:
+        measurements_qs = Measurement.objects.filter(well=well).order_by("measured_on")
+    else:
+        from_dt = now - timedelta(days=365)
+        to_dt = now
 
-    measurements = (
-        Measurement.objects.filter(
+        from_param = request.query_params.get("from")
+        to_param = request.query_params.get("to")
+        try:
+            if from_param:
+                from_dt = timezone.datetime.fromisoformat(from_param).replace(
+                    tzinfo=timezone.utc
+                )
+            if to_param:
+                to_dt = timezone.datetime.fromisoformat(to_param).replace(
+                    tzinfo=timezone.utc
+                )
+        except ValueError:
+            return Response({"error": "Invalid date format. Use ISO 8601."}, status=400)
+
+        measurements_qs = Measurement.objects.filter(
             well=well,
             measured_on__gte=from_dt.date(),
             measured_on__lte=to_dt.date(),
-        )
-        .order_by("measured_on")
-        .values_list("measured_on", "value_m_nap")
-    )
+        ).order_by("measured_on")
 
-    series = [{"t": d.isoformat(), "v": v} for d, v in measurements]
+    series = [
+        {"t": d.isoformat(), "v": v}
+        for d, v in measurements_qs.values_list("measured_on", "value_m_nap")
+    ]
 
     baseline = _weekly_baseline(well, status)
+
+    weekly_baselines = [
+        {"week": idx, "p10": p10, "p50": p50, "p90": p90}
+        for idx, p10, p50, p90 in WellBaseline.objects.filter(
+            well=well, period_type=PeriodType.WEEK
+        )
+        .order_by("period_index")
+        .values_list("period_index", "p10", "p50", "p90")
+    ]
 
     return Response(
         {
@@ -190,6 +203,7 @@ def well_series(request: Request, bro_id: str) -> Response:
                 if baseline
                 else None
             ),
+            "weekly_baselines": weekly_baselines,
         }
     )
 

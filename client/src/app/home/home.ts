@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import * as maplibregl from 'maplibre-gl';
 
 import { WellDetail, WellSeries, WellsService } from '../wells.service';
+import { WellChartComponent } from '../well-chart-dialog/well-chart-dialog';
 
 const CLASSIFICATION_COLORS: { [key: string]: string } = {
   very_low: '#d73027',
@@ -26,7 +27,7 @@ const CLASSIFICATION_LABELS: { [key: string]: string } = {
 
 @Component({
   selector: 'app-home',
-  imports: [CommonModule, MatProgressSpinnerModule, MatIconModule],
+  imports: [CommonModule, MatProgressSpinnerModule, MatIconModule, WellChartComponent],
   templateUrl: './home.html',
   styleUrl: './home.scss',
 })
@@ -45,6 +46,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   selectedWell = signal<WellDetail | null>(null);
   seriesLoading = signal(false);
   series = signal<WellSeries | null>(null);
+  showChart = signal(false);
 
   readonly classifications = Object.keys(CLASSIFICATION_LABELS);
   readonly classificationColors = CLASSIFICATION_COLORS;
@@ -211,9 +213,18 @@ export class HomeComponent implements OnInit, OnDestroy {
     ctx.stroke();
   }
 
+  openDetailChart(): void {
+    this.showChart.set(true);
+  }
+
+  closeChart(): void {
+    this.showChart.set(false);
+  }
+
   closePanel(): void {
     this.selectedWell.set(null);
     this.series.set(null);
+    this.showChart.set(false);
   }
 
   formatDate(iso: string | null): string {

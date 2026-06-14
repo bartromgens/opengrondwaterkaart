@@ -56,10 +56,18 @@ export interface SeriesPoint {
   v: number;
 }
 
+export interface WeeklyBaseline {
+  week: number;
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
 export interface WellSeries {
   bro_id: string;
   series: SeriesPoint[];
   baseline_bands: { p10: number; p50: number; p90: number } | null;
+  weekly_baselines: WeeklyBaseline[];
 }
 
 export interface MetaResponse {
@@ -84,8 +92,12 @@ export class WellsService {
     return this.http.get<WellDetail>(`/api/wells/${broId}/`);
   }
 
-  getWellSeries(broId: string): Observable<WellSeries> {
-    return this.http.get<WellSeries>(`/api/wells/${broId}/series/`);
+  getWellSeries(broId: string, opts?: { full?: boolean }): Observable<WellSeries> {
+    let params = new HttpParams();
+    if (opts?.full) {
+      params = params.set('full', '1');
+    }
+    return this.http.get<WellSeries>(`/api/wells/${broId}/series/`, { params });
   }
 
   getMeta(): Observable<MetaResponse> {

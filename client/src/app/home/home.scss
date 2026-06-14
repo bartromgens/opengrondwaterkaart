@@ -245,3 +245,48 @@
   color: #888;
   margin: 0;
 }
+
+.panel-detail-chart {
+  padding: 8px 14px 14px;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 4px;
+}
+
+.bottom-chart-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100vw / 3);
+  z-index: 30;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.18);
+  border-radius: 10px 10px 0 0;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.detail-chart-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  background: #f0f5ff;
+  color: #1a6ebd;
+  border: 1px solid #c5d9f5;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover {
+    background: #ddeafc;
+  }
+}

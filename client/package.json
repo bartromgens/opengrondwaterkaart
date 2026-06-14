@@ -20,7 +20,9 @@
     "@angular/material": "^22.0.1",
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
+    "echarts": "^6.1.0",
     "maplibre-gl": "^5.24.0",
+    "ngx-echarts": "^22.0.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
