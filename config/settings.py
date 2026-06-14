@@ -84,6 +84,9 @@ BRO_RATE_LIMIT_RPS = 2
 # Parallel BRO API workers (shared rate-limited bucket)
 BRO_PARALLEL_WORKERS = 2
 
+# Use single GLD object fetch when the time window exceeds this many days
+BRO_BULK_FETCH_DAYS = 14
+
 # Skip wells whose last observation is older than this many days
 INACTIVE_WELL_DAYS = 365
 

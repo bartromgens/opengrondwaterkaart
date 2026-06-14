@@ -25,6 +25,9 @@ SWE_NS = "http://www.opengis.net/swe/2.0"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 
 CHUNK_SIZE = 200
+# Per-observation fetches are one HTTP call per summary entry (~daily). Beyond
+# this window, fetch the full GLD object once instead of hundreds of requests.
+GLD_OBJECT_TIMEOUT = 120
 logger = logging.getLogger(__name__)
 STATUS_UPDATE_FIELDS = [
     "last_fetched_at",
@@ -52,6 +55,15 @@ class TokenBucket:
 
 
 _MAX_GET_ATTEMPTS = 8
+_thread_local = threading.local()
+
+
+def _http_session() -> requests.Session:
+    session = getattr(_thread_local, "session", None)
+    if session is None:
+        session = requests.Session()
+        _thread_local.session = session
+    return session
 
 
 def _retry_delay(attempt: int, status_code: int | None) -> float:
@@ -77,7 +89,7 @@ def _get(
     for attempt in range(_MAX_GET_ATTEMPTS):
         bucket.acquire()
         try:
-            resp = requests.get(url, params=params or {}, timeout=timeout)
+            resp = _http_session().get(url, params=params or {}, timeout=timeout)
             last_status = resp.status_code
             if resp.status_code == 429 or resp.status_code >= 500:
                 delay = _retry_delay(attempt, resp.status_code)
@@ -163,7 +175,31 @@ def _fetch_since(
     return last_fetched_at
 
 
-def _fetch_gld(
+def _filter_since(
+    observations: list[tuple[datetime, float, str]], since: datetime | None
+) -> list[tuple[datetime, float, str]]:
+    if since is None:
+        return observations
+    return [(ts, val, quality) for ts, val, quality in observations if ts >= since]
+
+
+def _should_bulk_fetch(since: datetime | None) -> bool:
+    if since is None:
+        return True
+    threshold = getattr(settings, "BRO_BULK_FETCH_DAYS", 14)
+    age_days = (django_timezone.now() - since).days
+    return age_days > threshold
+
+
+def _fetch_gld_object_bulk(
+    gld_bro_id: str, since: datetime | None, bucket: TokenBucket
+) -> list[tuple[datetime, float, str]]:
+    url = GLD_BASE_URL.format(gld_bro_id=gld_bro_id)
+    resp = _get(url, bucket, timeout=GLD_OBJECT_TIMEOUT)
+    return _filter_since(_parse_tvp_xml(resp.content), since)
+
+
+def _fetch_gld_per_observation(
     gld_bro_id: str, since: datetime | None, bucket: TokenBucket
 ) -> list[tuple[datetime, float, str]]:
     obs_list = _observations_since(gld_bro_id, since, bucket)
@@ -178,9 +214,15 @@ def _fetch_gld(
         url = OBSERVATION_URL.format(gld_bro_id=gld_bro_id, observation_id=obs_id)
         resp = _get(url, bucket, params=params)
         all_results.extend(_parse_tvp_xml(resp.content))
-    if since:
-        return [(ts, val, quality) for ts, val, quality in all_results if ts >= since]
-    return all_results
+    return _filter_since(all_results, since)
+
+
+def _fetch_gld(
+    gld_bro_id: str, since: datetime | None, bucket: TokenBucket
+) -> list[tuple[datetime, float, str]]:
+    if _should_bulk_fetch(since):
+        return _fetch_gld_object_bulk(gld_bro_id, since, bucket)
+    return _fetch_gld_per_observation(gld_bro_id, since, bucket)
 
 
 def _upsert_measurements(
@@ -188,8 +230,14 @@ def _upsert_measurements(
 ) -> None:
     if not observations:
         return
+    min_ts = min(ts for ts, _, _ in observations)
+    max_ts = max(ts for ts, _, _ in observations)
     existing_times = set(
-        Measurement.objects.filter(well=well).values_list("measured_at", flat=True)
+        Measurement.objects.filter(
+            well=well,
+            measured_at__gte=min_ts,
+            measured_at__lte=max_ts,
+        ).values_list("measured_at", flat=True)
     )
     new_obs = [
         Measurement(well=well, measured_at=ts, value_m_nap=val, quality=quality)
