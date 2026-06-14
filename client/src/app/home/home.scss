@@ -1,0 +1,15 @@
+:host {
+  display: block;
+  padding: 24px;
+  max-width: 600px;
+}
+
+.status {
+  font-size: 1rem;
+  margin-top: 8px;
+}
+
+.error {
+  color: var(--mat-sys-error);
+  margin-top: 8px;
+}
