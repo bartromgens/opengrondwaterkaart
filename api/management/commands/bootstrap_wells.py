@@ -1,6 +1,7 @@
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+from dataclasses import dataclass
 from typing import Any
 
 import fiona
@@ -43,6 +44,74 @@ def _parse_float(val: Any) -> float | None:
         return None
 
 
+@dataclass
+class ElevationLookups:
+    ground_levels: dict[int, float | None]
+    tube_tops: dict[tuple[int, int], float | None]
+    tube_fks: dict[tuple[int, int], int]
+    screens: dict[int, tuple[float | None, float | None]]
+
+
+def _load_elevation_lookups(gpkg_path: str) -> ElevationLookups:
+    ground_levels: dict[int, float | None] = {}
+    tube_tops: dict[tuple[int, int], float | None] = {}
+    tube_fks: dict[tuple[int, int], int] = {}
+    screens: dict[int, tuple[float | None, float | None]] = {}
+
+    with fiona.open(gpkg_path, layer="delivered_vertical_position") as src:
+        for feature in src:
+            well_fk = feature["properties"].get("groundwater_monitoring_well_fk")
+            if well_fk is None:
+                continue
+            ground_levels[int(well_fk)] = _parse_float(
+                feature["properties"].get("ground_level_position")
+            )
+
+    with fiona.open(gpkg_path, layer="monitoring_tube") as src:
+        for feature in src:
+            props = feature["properties"]
+            well_fk = props.get("groundwater_monitoring_well_fk")
+            tube_number = props.get("tube_number")
+            if well_fk is None or tube_number is None:
+                continue
+            key = (int(well_fk), int(tube_number))
+            tube_tops[key] = _parse_float(props.get("tube_top_position"))
+            tube_fks[key] = int(feature["id"])
+
+    with fiona.open(gpkg_path, layer="screen") as src:
+        for feature in src:
+            tube_fk = feature["properties"].get("monitoring_tube_fk")
+            if tube_fk is None:
+                continue
+            props = feature["properties"]
+            screens[int(tube_fk)] = (
+                _parse_float(props.get("screen_top_position")),
+                _parse_float(props.get("screen_bottom_position")),
+            )
+
+    return ElevationLookups(
+        ground_levels=ground_levels,
+        tube_tops=tube_tops,
+        tube_fks=tube_fks,
+        screens=screens,
+    )
+
+
+def _elevation_for_well(
+    well_pk: int, tube_number: int, lookups: ElevationLookups
+) -> tuple[float | None, float | None, float | None, float | None]:
+    ground_level_m = lookups.ground_levels.get(well_pk)
+    tube_key = (well_pk, tube_number)
+    tube_top_m = lookups.tube_tops.get(tube_key)
+    tube_fk = lookups.tube_fks.get(tube_key)
+    screen_top_m = screen_bottom_m = None
+    if tube_fk is not None:
+        screen = lookups.screens.get(tube_fk)
+        if screen is not None:
+            screen_top_m, screen_bottom_m = screen
+    return ground_level_m, tube_top_m, screen_top_m, screen_bottom_m
+
+
 class Command(BaseCommand):
     help = "Bootstrap well locations from the PDOK GMW bulk GeoPackage ATOM feed."
 
@@ -73,9 +142,11 @@ class Command(BaseCommand):
                     zf.extract(gpkg_names[0], tmpdir)
                     gpkg_path = f"{tmpdir}/{gpkg_names[0]}"
 
+                self.stdout.write("Loading elevation lookups...")
+                lookups = _load_elevation_lookups(gpkg_path)
                 self.stdout.write("Reading GeoPackage layers...")
                 with fiona.open(gpkg_path) as src:
-                    self._upsert_layer(src, now, errors)
+                    self._upsert_layer(src, now, errors, lookups)
 
             run.wells_processed = Well.objects.count()
             run.status = IngestRunStatus.SUCCESS
@@ -92,7 +163,13 @@ class Command(BaseCommand):
         run.errors_json = errors
         run.save()
 
-    def _upsert_layer(self, src: fiona.Collection, now: Any, errors: list[str]) -> None:
+    def _upsert_layer(
+        self,
+        src: fiona.Collection,
+        now: Any,
+        errors: list[str],
+        lookups: ElevationLookups,
+    ) -> None:
         batch_size = 500
         to_create: list[Well] = []
         to_update: list[Well] = []
@@ -126,19 +203,8 @@ class Command(BaseCommand):
                 )
                 nitg_code = str(props.get("nitg_code") or props.get("nitgCode") or "")
                 name = str(props.get("name") or "")
-                ground_level_m = _parse_float(
-                    props.get("ground_level_position")
-                    or props.get("groundLevelPosition")
-                )
-                tube_top_m = _parse_float(
-                    props.get("tube_top_position") or props.get("tubeTopPosition")
-                )
-                screen_top_m = _parse_float(
-                    props.get("screen_top_position") or props.get("screenTopPosition")
-                )
-                screen_bottom_m = _parse_float(
-                    props.get("screen_bottom_position")
-                    or props.get("screenBottomPosition")
+                ground_level_m, tube_top_m, screen_top_m, screen_bottom_m = (
+                    _elevation_for_well(int(feature["id"]), tube_number, lookups)
                 )
 
                 if bro_id in existing:
