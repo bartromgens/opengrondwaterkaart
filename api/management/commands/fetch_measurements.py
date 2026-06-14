@@ -38,6 +38,17 @@ STATUS_UPDATE_FIELDS = [
 ]
 
 
+def _format_duration(seconds: float) -> str:
+    total = max(0, int(seconds))
+    if total < 60:
+        return f"{total}s"
+    minutes, sec = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m {sec}s" if sec else f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+
+
 class TokenBucket:
     """Strict interval-based rate limiter shared across worker threads."""
 
@@ -231,7 +242,7 @@ def _aggregate_daily(
 ) -> list[tuple[date, float]]:
     day_values: dict[date, list[float]] = defaultdict(list)
     for ts, val, quality in observations:
-        if quality == "afgekeurd":
+        if quality != "goedgekeurd":
             continue
         day_values[ts.date()].append(val)
     return sorted([(d, sum(vals) / len(vals)) for d, vals in day_values.items()])
@@ -364,6 +375,14 @@ class Command(BaseCommand):
             default=0,
             help="Only process N wells (0 = all, for testing).",
         )
+        parser.add_argument(
+            "--reset",
+            action="store_true",
+            help=(
+                "Clear last_fetched_at for selected wells so data is fetched "
+                "from MEASUREMENT_RETENTION_DAYS ago."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         run = IngestRun.objects.create(kind="fetch_measurements")
@@ -396,6 +415,15 @@ class Command(BaseCommand):
         if limit:
             wells = wells[:limit]
 
+        if options["reset"]:
+            well_ids = list(wells.values_list("id", flat=True))
+            reset_count = WellStatus.objects.filter(well_id__in=well_ids).update(
+                last_fetched_at=None
+            )
+            self.stdout.write(
+                f"Reset last_fetched_at for {reset_count} of {len(well_ids)} wells."
+            )
+
         total = wells.count()
         self.stdout.write(
             f"Fetching measurements for {total} active wells "
@@ -403,6 +431,7 @@ class Command(BaseCommand):
         )
 
         last_logged_pct = 0
+        started_at = time.monotonic()
 
         def log_progress() -> None:
             nonlocal last_logged_pct
@@ -411,7 +440,12 @@ class Command(BaseCommand):
             new_pct = completed * 100 // total
             while last_logged_pct < new_pct:
                 last_logged_pct += 1
-                self.stdout.write(f"  {completed}/{total} ({last_logged_pct}%)")
+                eta = ""
+                if completed > 0:
+                    elapsed = time.monotonic() - started_at
+                    remaining = (total - completed) * elapsed / completed
+                    eta = f", ETA {_format_duration(remaining)}"
+                self.stdout.write(f"  {completed}/{total} ({last_logged_pct}%){eta}")
                 self.stdout.flush()
 
         for chunk in _well_chunks(wells, CHUNK_SIZE):

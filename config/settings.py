@@ -70,19 +70,25 @@ SGI_THRESHOLDS = {
 }
 
 # Minimum years of data per calendar period required to compute a baseline
-SGI_MIN_YEARS = 8
+SGI_MIN_YEARS = 5
 
 # Rolling measurement retention window (days)
-MEASUREMENT_RETENTION_DAYS = 365
+MEASUREMENT_RETENTION_DAYS = 9 * 365
 
 # Mark a well stale if latest measurement is older than this many days
 STALE_THRESHOLD_DAYS = 35
 
-# BRO GLD REST API rate limit (requests per second)
+# PDOK GM-in-samenhang ATOM feed (used by bootstrap_wells for bulk well + GLD linking)
+SAMENHANG_ATOM_URL = (
+    "https://service.pdok.nl/tno/bro-grondwatermonitoring-in-samenhang-karakteristieken"
+    "/atom/index.xml"
+)
+
+# BRO GLD REST API rate limit (requests per second, used by fetch_measurements)
 BRO_RATE_LIMIT_RPS = 2
 
 # Parallel BRO API workers (shared rate-limited bucket)
-BRO_PARALLEL_WORKERS = 2
+BRO_PARALLEL_WORKERS = 3
 
 # Use single GLD object fetch when the time window exceeds this many days
 BRO_BULK_FETCH_DAYS = 14
