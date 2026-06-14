@@ -11,10 +11,25 @@ from .models import (
     IngestRun,
     IngestRunStatus,
     Measurement,
+    PeriodType,
     Well,
     WellBaseline,
     WellStatus,
 )
+
+
+def _baseline_period_index(status: WellStatus | None) -> int:
+    if status and status.latest_measured_at:
+        return status.latest_measured_at.isocalendar()[1]
+    return timezone.now().isocalendar()[1]
+
+
+def _weekly_baseline(well: Well, status: WellStatus | None) -> WellBaseline | None:
+    return WellBaseline.objects.filter(
+        well=well,
+        period_type=PeriodType.WEEK,
+        period_index=_baseline_period_index(status),
+    ).first()
 
 
 @api_view(["GET"])
@@ -74,12 +89,7 @@ def well_detail(request: Request, bro_id: str) -> Response:
         return Response({"error": "Well not found."}, status=404)
 
     status = getattr(well, "status", None)
-    now = timezone.now()
-
-    current_week = now.isocalendar()[1]
-    baseline = WellBaseline.objects.filter(
-        well=well, period_type="week", period_index=current_week
-    ).first()
+    baseline = _weekly_baseline(well, status)
 
     data: dict = {
         "bro_id": well.bro_id,
@@ -130,10 +140,11 @@ def well_detail(request: Request, bro_id: str) -> Response:
 @api_view(["GET"])
 def well_series(request: Request, bro_id: str) -> Response:
     try:
-        well = Well.objects.get(bro_id=bro_id)
+        well = Well.objects.select_related("status").get(bro_id=bro_id)
     except Well.DoesNotExist:
         return Response({"error": "Well not found."}, status=404)
 
+    status = getattr(well, "status", None)
     now = timezone.now()
     from_dt = now - timedelta(days=365)
     to_dt = now
@@ -162,10 +173,7 @@ def well_series(request: Request, bro_id: str) -> Response:
 
     series = [{"t": ts.isoformat(), "v": v} for ts, v in measurements]
 
-    current_week = now.isocalendar()[1]
-    baseline = WellBaseline.objects.filter(
-        well=well, period_type="week", period_index=current_week
-    ).first()
+    baseline = _weekly_baseline(well, status)
 
     return Response(
         {

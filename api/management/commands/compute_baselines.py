@@ -44,24 +44,30 @@ def _compute_and_save_baselines(
     baseline_start = min(all_dates)
     baseline_end = max(all_dates)
 
+    # Group raw measurements by (period_index, year) to get one representative
+    # value per year per period.  This ensures the baseline captures inter-annual
+    # variation rather than intra-period noise from high-frequency wells.
     if period_type == PeriodType.WEEK:
-        groups: dict[int, list[float]] = {}
+        year_groups: dict[int, dict[int, list[float]]] = {}
         for d, v in zip(all_dates, values):
             week = d.isocalendar()[1]
-            groups.setdefault(week, []).append(v)
+            year_groups.setdefault(week, {}).setdefault(d.isocalendar()[0], []).append(
+                v
+            )
         period_range = range(1, 54)
     else:
-        groups = {}
+        year_groups = {}
         for d, v in zip(all_dates, values):
-            groups.setdefault(d.month, []).append(v)
+            year_groups.setdefault(d.month, {}).setdefault(d.year, []).append(v)
         period_range = range(1, 13)
 
     saved = 0
     to_upsert = []
     for idx in period_range:
-        vals = groups.get(idx, [])
-        if len(vals) < min_years:
+        by_year = year_groups.get(idx, {})
+        if len(by_year) < min_years:
             continue
+        vals = [float(np.mean(readings)) for readings in by_year.values()]
 
         arr = np.array(vals, dtype=float)
         pcts = np.percentile(arr, PERCENTILES)
