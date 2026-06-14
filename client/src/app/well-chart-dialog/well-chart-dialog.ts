@@ -13,14 +13,16 @@ function getIsoWeek(date: Date): number {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
+type BaselinePoint = [number, number] | [number, null];
+
 function buildBaselineSeries(
   startDate: Date,
   endDate: Date,
   weekMap: Map<number, WeeklyBaseline>,
-): { p10: [number, number][]; p50: [number, number][]; p90Band: [number, number][] } {
-  const p10: [number, number][] = [];
-  const p50: [number, number][] = [];
-  const p90Band: [number, number][] = [];
+): { p10: BaselinePoint[]; p50: BaselinePoint[]; p90Band: BaselinePoint[] } {
+  const p10: BaselinePoint[] = [];
+  const p50: BaselinePoint[] = [];
+  const p90Band: BaselinePoint[] = [];
 
   const cur = new Date(startDate);
   cur.setUTCHours(0, 0, 0, 0);
@@ -30,11 +32,15 @@ function buildBaselineSeries(
   while (cur <= end) {
     const week = getIsoWeek(cur);
     const bl = weekMap.get(week) ?? weekMap.get(week === 53 ? 52 : week);
+    const ts = cur.getTime();
     if (bl) {
-      const ts = cur.getTime();
       p10.push([ts, bl.p10]);
       p50.push([ts, bl.p50]);
       p90Band.push([ts, bl.p90 - bl.p10]);
+    } else {
+      p10.push([ts, null]);
+      p50.push([ts, null]);
+      p90Band.push([ts, null]);
     }
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
@@ -96,42 +102,23 @@ export class WellChartComponent implements OnInit, OnChanges {
 
     const now = Date.now();
 
-    type NullablePoint = [number, number] | [number, null];
-    let baselineP10: [number, number][] = [];
-    let baselineP50: NullablePoint[] = [];
-    let baselineP90Band: [number, number][] = [];
+    let baselineP10: BaselinePoint[] = [];
+    let baselineP50: BaselinePoint[] = [];
+    let baselineP90Band: BaselinePoint[] = [];
 
     if (weekMap.size > 0 && raw.length > 0) {
-      // Band (P10/P90): continuous — no nulls, avoids ECharts stacking-null bug
-      const continuousBand = buildBaselineSeries(new Date(raw[0][0]), new Date(now), weekMap);
-      baselineP10 = continuousBand.p10;
-      baselineP90Band = continuousBand.p90Band;
-
-      // Median line: segmented — nulls inserted at measurement gaps so line breaks
-      const segments: Array<[number, number]> = [];
-      let segStart = raw[0][0];
-      for (let i = 0; i < raw.length - 1; i++) {
-        if (raw[i + 1][0] - raw[i][0] > GAP_THRESHOLD_MS) {
-          segments.push([segStart, raw[i][0]]);
-          segStart = raw[i + 1][0];
-        }
-      }
-      segments.push([segStart, now]);
-
-      for (let s = 0; s < segments.length; s++) {
-        if (s > 0) {
-          const gapMid = Math.round((segments[s - 1][1] + segments[s][0]) / 2);
-          baselineP50.push([gapMid, null]);
-        }
-        const built = buildBaselineSeries(new Date(segments[s][0]), new Date(segments[s][1]), weekMap);
-        baselineP50.push(...built.p50);
-      }
+      const built = buildBaselineSeries(new Date(raw[0][0]), new Date(now), weekMap);
+      baselineP10 = built.p10;
+      baselineP50 = built.p50;
+      baselineP90Band = built.p90Band;
     }
 
+    const p10NonNull = baselineP10.filter((p) => p[1] != null) as [number, number][];
+    const p90BandNonNull = baselineP90Band.filter((p) => p[1] != null) as [number, number][];
     const yValues: number[] = [
       ...raw.map((p) => p[1]),
-      ...baselineP10.map((p) => p[1]),
-      ...baselineP10.map((p, i) => p[1] + (baselineP90Band[i]?.[1] ?? 0)),
+      ...p10NonNull.map((p) => p[1]),
+      ...p10NonNull.map((p, i) => p[1] + (p90BandNonNull[i]?.[1] ?? 0)),
       ...(well.ground_level_m != null ? [well.ground_level_m] : []),
     ];
     const yMin = Math.min(...yValues);
@@ -144,7 +131,7 @@ export class WellChartComponent implements OnInit, OnChanges {
       grid: {
         top: 40,
         right: well.ground_level_m != null ? 80 : 20,
-        bottom: 60,
+        bottom: 80,
         left: 60,
       },
       tooltip: {
@@ -212,7 +199,7 @@ export class WellChartComponent implements OnInit, OnChanges {
         {
           type: 'slider',
           bottom: 4,
-          height: 20,
+          height: 40,
           start: 0,
           end: 100,
           filterMode: 'none',
@@ -227,6 +214,7 @@ export class WellChartComponent implements OnInit, OnChanges {
           data: baselineP10,
           stack: 'band',
           stackStrategy: 'all',
+          connectNulls: false,
           symbol: 'none',
           lineStyle: { opacity: 0 },
           itemStyle: { color: 'transparent' },
@@ -241,6 +229,7 @@ export class WellChartComponent implements OnInit, OnChanges {
           data: baselineP90Band,
           stack: 'band',
           stackStrategy: 'all',
+          connectNulls: false,
           symbol: 'none',
           lineStyle: { opacity: 0 },
           itemStyle: { color: 'rgba(100,150,220,0.6)' },
