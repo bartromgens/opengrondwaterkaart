@@ -115,47 +115,77 @@ export class WellChartComponent implements OnInit, OnChanges {
       baselineP90Band = built.p90Band;
     }
 
-    const p10NonNull = baselineP10.filter((p) => p[1] != null) as [number, number][];
-    const p90BandNonNull = baselineP90Band.filter((p) => p[1] != null) as [number, number][];
-    const yValues: number[] = [
-      ...raw.map((p) => p[1]),
-      ...p10NonNull.map((p) => p[1]),
-      ...p10NonNull.map((p, i) => p[1] + (p90BandNonNull[i]?.[1] ?? 0)),
-      ...(well.ground_level_m != null ? [well.ground_level_m] : []),
+    const gl = well.ground_level_m;
+    const useDepth = gl != null;
+
+    // In depth mode transform all y-values: depth = ground_level_m - m_nap
+    // Band floor becomes the shallower P90 edge; spread stays the same (p90-p10).
+    const toDepth = (v: number) => gl! - v;
+    const transformPoints = (pts: BaselinePoint[]): BaselinePoint[] =>
+      useDepth ? pts.map((p) => (p[1] == null ? [p[0], null] : [p[0], toDepth(p[1])])) : pts;
+
+    const plotMeasurements: ([number, number] | [number, null])[] = useDepth
+      ? measurements.map((p) => (p[1] == null ? [p[0], null] : [p[0], toDepth(p[1])]))
+      : measurements;
+
+    // For the band in depth mode: floor = depth(p90) = depth(p10) - spread,
+    // i.e. ground_level_m - (p10 + p90Band). Spread stays unchanged.
+    const plotFloor: BaselinePoint[] = useDepth
+      ? baselineP10.map((p, i): BaselinePoint => {
+          if (p[1] == null) return [p[0], null];
+          const spread = baselineP90Band[i]?.[1] ?? 0;
+          return [p[0], toDepth(p[1] + (spread as number))];
+        })
+      : baselineP10;
+    const plotSpread: BaselinePoint[] = baselineP90Band; // spread unchanged
+    const plotP50: BaselinePoint[] = transformPoints(baselineP50);
+
+    // y-axis bounds
+    const plotFloorNonNull = plotFloor.filter((p) => p[1] != null) as [number, number][];
+    const plotSpreadNonNull = plotSpread.filter((p) => p[1] != null) as [number, number][];
+    const rawDepthValues = raw.map((p) => (useDepth ? toDepth(p[1]) : p[1]));
+    const allYValues: number[] = [
+      ...rawDepthValues,
+      ...plotFloorNonNull.map((p) => p[1]),
+      ...plotFloorNonNull.map((p, i) => p[1] + (plotSpreadNonNull[i]?.[1] ?? 0)),
+      ...(useDepth ? [0] : [gl ?? 0]), // always include maaiveld (depth=0 or gl m NAP)
     ];
-    const yMin = Math.min(...yValues);
-    const yMax = Math.max(...yValues);
+    const yMin = Math.min(...allYValues);
+    const yMax = Math.max(...allYValues);
     const yPad = (yMax - yMin) * 0.05 || 0.1;
+
+    // Tooltip shows depth + m NAP when in depth mode, m NAP only otherwise
+    const tooltipFormatter = (params: any[]) => {
+      if (!params?.length) return '';
+      const date = new Date(params[0].axisValue).toLocaleDateString('nl-NL', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+      let html = `<div style="font-weight:600;margin-bottom:4px">${date}</div>`;
+      for (const p of params) {
+        if (p.seriesName === 'Grondwaterstand' && p.value?.[1] != null) {
+          const depthVal = p.value[1] as number;
+          const napVal = useDepth ? (gl! - depthVal).toFixed(3) : depthVal.toFixed(3);
+          const depthStr = useDepth ? ` / ${depthVal.toFixed(2)} m diepte` : '';
+          html += `<div>${p.marker} ${p.seriesName}: <b>${napVal} m NAP${depthStr}</b></div>`;
+        } else if (p.seriesName === 'Mediaan (seizoen)' && p.value?.[1] != null) {
+          const depthVal = p.value[1] as number;
+          const napVal = useDepth ? (gl! - depthVal).toFixed(3) : depthVal.toFixed(3);
+          html += `<div>${p.marker} ${p.seriesName}: <b>${napVal} m NAP</b></div>`;
+        }
+      }
+      return html;
+    };
 
     const option: EChartsCoreOption = {
       animation: false,
       backgroundColor: 'transparent',
-      grid: {
-        top: 40,
-        right: well.ground_level_m != null ? 80 : 20,
-        bottom: 80,
-        left: 60,
-      },
+      grid: { top: 40, right: 80, bottom: 80, left: 60 },
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'cross', crossStyle: { color: '#999' } },
-        formatter: (params: any[]) => {
-          if (!params?.length) return '';
-          const date = new Date(params[0].axisValue).toLocaleDateString('nl-NL', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          });
-          let html = `<div style="font-weight:600;margin-bottom:4px">${date}</div>`;
-          for (const p of params) {
-            if (p.seriesName === 'Grondwaterstand' && p.value != null) {
-              html += `<div>${p.marker} ${p.seriesName}: <b>${(p.value[1] as number).toFixed(3)} m NAP</b></div>`;
-            } else if (p.seriesName === 'Mediaan (seizoen)' && p.value != null) {
-              html += `<div>${p.marker} ${p.seriesName}: <b>${(p.value[1] as number).toFixed(3)} m NAP</b></div>`;
-            }
-          }
-          return html;
-        },
+        formatter: tooltipFormatter,
       },
       legend: {
         top: 8,
@@ -164,35 +194,41 @@ export class WellChartComponent implements OnInit, OnChanges {
       },
       xAxis: {
         type: 'time',
-        min: raw.length > 0 ? (() => { const d = new Date(raw[0][0]); d.setUTCHours(0,0,0,0); return d.getTime(); })() : undefined,
+        min:
+          raw.length > 0
+            ? (() => {
+                const d = new Date(raw[0][0]);
+                d.setUTCHours(0, 0, 0, 0);
+                return d.getTime();
+              })()
+            : undefined,
         max: now,
         axisLabel: { fontSize: 11 },
       },
       yAxis: [
         {
           type: 'value',
-          name: 'm NAP',
+          name: useDepth ? 'Diepte onder maaiveld (m)' : 'm NAP',
+          inverse: useDepth,
           min: yMin - yPad,
           max: yMax + yPad,
           nameTextStyle: { fontSize: 11 },
-          axisLabel: {
-            fontSize: 11,
-            formatter: (v: number) => v.toFixed(2),
-          },
+          axisLabel: { fontSize: 11, formatter: (v: number) => v.toFixed(2) },
         },
         {
           type: 'value',
-          name: 'Diepte onder maaiveld (m)',
+          name: useDepth ? 'm NAP' : 'Diepte onder maaiveld (m)',
           position: 'right',
+          inverse: useDepth,
           min: yMin - yPad,
           max: yMax + yPad,
-          show: well.ground_level_m != null,
+          show: gl != null,
           splitLine: { show: false },
           nameTextStyle: { fontSize: 11 },
           axisLabel: {
             fontSize: 11,
             formatter: (v: number) =>
-              well.ground_level_m != null ? (well.ground_level_m - v).toFixed(2) : '',
+              useDepth ? (gl! - v).toFixed(2) : gl != null ? (gl - v).toFixed(2) : '',
           },
         },
       ],
@@ -213,7 +249,7 @@ export class WellChartComponent implements OnInit, OnChanges {
         {
           name: 'P10 bodem',
           type: 'line',
-          data: baselineP10,
+          data: plotFloor,
           stack: 'band',
           stackStrategy: 'all',
           connectNulls: false,
@@ -228,7 +264,7 @@ export class WellChartComponent implements OnInit, OnChanges {
         {
           name: 'Bandbreedte P10–P90',
           type: 'line',
-          data: baselineP90Band,
+          data: plotSpread,
           stack: 'band',
           stackStrategy: 'all',
           connectNulls: false,
@@ -240,7 +276,7 @@ export class WellChartComponent implements OnInit, OnChanges {
         {
           name: 'Mediaan (seizoen)',
           type: 'line',
-          data: baselineP50,
+          data: plotP50,
           connectNulls: false,
           symbol: 'none',
           lineStyle: { color: 'rgba(100,150,220,0.7)', type: 'dashed', width: 1.5 },
@@ -249,7 +285,7 @@ export class WellChartComponent implements OnInit, OnChanges {
         {
           name: 'Grondwaterstand',
           type: 'line',
-          data: measurements,
+          data: plotMeasurements,
           connectNulls: false,
           symbol: 'none',
           lineStyle: { color: '#1a6ebd', width: 1.5 },
@@ -268,13 +304,13 @@ export class WellChartComponent implements OnInit, OnChanges {
                   color: '#e55',
                 },
               },
-              ...(well.ground_level_m != null
+              ...(gl != null
                 ? [
                     {
-                      yAxis: well.ground_level_m,
+                      yAxis: useDepth ? 0 : gl,
                       lineStyle: { color: '#7a5c2e', type: 'dashed', width: 1.5 },
                       label: {
-                        formatter: `Maaiveld (${well.ground_level_m.toFixed(2)} m NAP)`,
+                        formatter: `Maaiveld (${gl.toFixed(2)} m NAP)`,
                         position: 'insideEndBottom',
                         fontSize: 10,
                         color: '#7a5c2e',
