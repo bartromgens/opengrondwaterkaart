@@ -118,8 +118,8 @@ def _compute_and_save_baselines(
 
 class Command(BaseCommand):
     help = (
-        "Compute per-well seasonal baseline percentiles from BRO history or stored "
-        "measurements. Run once initially, then monthly."
+        "Compute per-well seasonal baseline percentiles from stored measurements. "
+        "Run once initially, then monthly."
     )
 
     def add_arguments(self, parser: Any) -> None:
@@ -140,11 +140,6 @@ class Command(BaseCommand):
             action="store_true",
             help="Skip wells that already have baselines.",
         )
-        parser.add_argument(
-            "--from-db",
-            action="store_true",
-            help="Use stored Measurement rows instead of fetching from the BRO API.",
-        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         run = IngestRun.objects.create(kind="compute_baselines")
@@ -153,18 +148,7 @@ class Command(BaseCommand):
         period_type = options["period_type"]
         limit = options["limit"]
         skip_existing = options["skip_existing"]
-        from_db = options["from_db"]
         processed = 0
-        bucket = None
-        if not from_db:
-            from api.management.commands.fetch_measurements import (  # noqa: E402
-                TokenBucket,
-                _aggregate_daily,
-                _fetch_gld,
-            )
-
-            rate = getattr(settings, "BRO_RATE_LIMIT_RPS", 3)
-            bucket = TokenBucket(rate)
 
         inactive_days = getattr(settings, "INACTIVE_WELL_DAYS", 365)
         cutoff = (
@@ -187,15 +171,13 @@ class Command(BaseCommand):
                 .distinct()
             )
             wells = wells.exclude(id__in=wells_with_baselines)
-        if from_db:
-            wells = wells.filter(measurements__isnull=False).distinct()
+        wells = wells.filter(measurements__isnull=False).distinct()
         if limit:
             wells = wells[:limit]
 
         total = wells.count()
-        source = "database" if from_db else "BRO API"
         self.stdout.write(
-            f"Computing {period_type} baselines for {total} wells from {source} "
+            f"Computing {period_type} baselines for {total} wells "
             f"(min {min_years} samples/period)..."
         )
 
@@ -203,12 +185,7 @@ class Command(BaseCommand):
             if not well.gld_bro_id:
                 continue
             try:
-                if from_db:
-                    observations = _load_observations_from_db(well)
-                else:
-                    observations = _aggregate_daily(
-                        _fetch_gld(well.gld_bro_id, since=None, bucket=bucket)
-                    )
+                observations = _load_observations_from_db(well)
                 saved = _compute_and_save_baselines(
                     well, observations, period_type, min_years
                 )
