@@ -15,6 +15,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.gis",
     "rest_framework",
     "api",
 ]
@@ -50,18 +51,52 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "NAME": "opengrondwaterkaart",
+        "USER": "opengrondwaterkaart",
+        "PASSWORD": "",
+        "HOST": "localhost",
+        "PORT": "5432",
     }
 }
+
+# Classification thresholds (empirical percentile within seasonal baseline)
+SGI_THRESHOLDS = {
+    "very_low": 0.10,
+    "low": 0.25,
+    "normal": 0.75,
+    "high": 0.90,
+    # above 0.90 -> very_high
+}
+
+# Minimum years of data per calendar period required to compute a baseline
+SGI_MIN_YEARS = 8
+
+# Rolling measurement retention window (days)
+MEASUREMENT_RETENTION_DAYS = 365
+
+# Mark a well stale if latest measurement is older than this many days
+STALE_THRESHOLD_DAYS = 35
+
+# BRO GLD REST API rate limit (requests per second)
+BRO_RATE_LIMIT_RPS = 3
+
+# Skip wells whose last observation is older than this many days
+INACTIVE_WELL_DAYS = 365
 
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"  # noqa: E501
     },
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},  # noqa: E501
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},  # noqa: E501
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},  # noqa: E501
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"
+    },  # noqa: E501
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"
+    },  # noqa: E501
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"
+    },  # noqa: E501
 ]
 
 LANGUAGE_CODE = "en-us"

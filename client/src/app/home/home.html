@@ -1,17 +1,110 @@
-<mat-card>
-  <mat-card-header>
-    <mat-card-title>API Status</mat-card-title>
-    <mat-card-subtitle>Health check endpoint</mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
-    @if (loading()) {
-      <mat-spinner diameter="32" />
-    } @else if (error()) {
-      <p class="error">{{ error() }}</p>
-    } @else {
-      <p class="status">
-        Status: <strong>{{ health() }}</strong>
-      </p>
+<div class="map-layout">
+  <div #mapContainer class="map-container"></div>
+
+  @if (loading()) {
+    <div class="map-overlay-spinner">
+      <mat-spinner diameter="40" />
+    </div>
+  }
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-title">Grondwaterstand</div>
+    @for (cls of classifications; track cls) {
+      <div class="legend-item">
+        <span class="legend-dot" [style.background]="classificationColors[cls]"></span>
+        <span>{{ classificationLabels[cls] }}</span>
+      </div>
     }
-  </mat-card-content>
-</mat-card>
+    <div class="legend-item stale-note">
+      <span class="legend-dot stale"></span>
+      <span>Verouderd (&gt;35d)</span>
+    </div>
+  </div>
+
+  <!-- Freshness badge -->
+  @if (lastUpdated()) {
+    <div class="freshness-badge">
+      <mat-icon>update</mat-icon>
+      Bijgewerkt {{ formatDate(lastUpdated()) }} &bull; {{ totalWells() | number }} putten
+    </div>
+  }
+
+  <!-- Detail panel -->
+  @if (selectedWell()) {
+    <div class="detail-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-bro-id">{{ selectedWell()!.bro_id }}</div>
+          @if (selectedWell()!.nitg_code) {
+            <div class="panel-nitg">{{ selectedWell()!.nitg_code }}</div>
+          }
+        </div>
+        <button class="close-btn" (click)="closePanel()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      <div
+        class="panel-classification"
+        [style.background]="classificationColors[selectedWell()!.status.classification]"
+      >
+        {{ classificationLabels[selectedWell()!.status.classification] }}
+        @if (selectedWell()!.status.is_stale) {
+          <span class="stale-tag">verouderd</span>
+        }
+      </div>
+
+      <div class="panel-stats">
+        <div class="stat">
+          <span class="stat-label">Stand</span>
+          <span class="stat-value">{{
+            formatValue(selectedWell()!.status.latest_value_m_nap)
+          }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Percentiel</span>
+          <span class="stat-value">{{ formatPercentile(selectedWell()!.status.percentile) }}</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Gemeten op</span>
+          <span class="stat-value">{{
+            formatDate(selectedWell()!.status.latest_measured_at)
+          }}</span>
+        </div>
+        @if (selectedWell()!.ground_level_m !== null) {
+          <div class="stat">
+            <span class="stat-label">Maaiveld</span>
+            <span class="stat-value">{{ formatValue(selectedWell()!.ground_level_m) }}</span>
+          </div>
+        }
+      </div>
+
+      @if (selectedWell()!.baseline) {
+        <div class="panel-section-label">Historische bandbreedte (huidig seizoen)</div>
+        <div class="baseline-bar">
+          <span class="baseline-label">P10</span>
+          <span class="baseline-value">{{ formatValue(selectedWell()!.baseline!.p10) }}</span>
+          <span class="baseline-label">P50</span>
+          <span class="baseline-value">{{ formatValue(selectedWell()!.baseline!.p50) }}</span>
+          <span class="baseline-label">P90</span>
+          <span class="baseline-value">{{ formatValue(selectedWell()!.baseline!.p90) }}</span>
+        </div>
+      }
+
+      <div class="panel-section-label">Tijdreeks (afgelopen jaar)</div>
+      @if (seriesLoading()) {
+        <div class="chart-loading"><mat-spinner diameter="24" /></div>
+      } @else if (series() && series()!.series.length > 0) {
+        <canvas id="series-canvas" width="280" height="100" class="chart-canvas"></canvas>
+        <div class="chart-legend">
+          <span class="chart-band-label"
+            >Lichtblauw = P10–P90 bandbreedte &bull; Stippellijn = mediaan</span
+          >
+        </div>
+      } @else {
+        <p class="no-data">Geen meetdata beschikbaar.</p>
+      }
+    </div>
+  }
+</div>

@@ -1,3 +1,14 @@
 DEBUG = True
 SECRET_KEY = "change-me-to-a-random-secret-key"
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "NAME": "opengrondwaterkaart",
+        "USER": "opengrondwaterkaart",
+        "PASSWORD": "opengrondwaterkaart",
+        "HOST": "localhost",
+        "PORT": "5436",
+    }
+}

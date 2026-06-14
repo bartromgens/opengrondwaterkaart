@@ -1,17 +1,17 @@
-:host {
+.app-shell {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow: hidden;
 }
 
-.sidenav-container {
+.app-toolbar {
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.app-content {
   flex: 1;
-}
-
-.sidenav {
-  width: 220px;
-}
-
-.content {
-  padding: 16px;
+  overflow: hidden;
+  position: relative;
 }
