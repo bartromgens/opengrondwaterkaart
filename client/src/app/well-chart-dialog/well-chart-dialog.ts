@@ -153,6 +153,17 @@ export class WellChartComponent implements OnInit, OnChanges {
     const yMin = Math.min(...allYValues);
     const yMax = Math.max(...allYValues);
     const yPad = (yMax - yMin) * 0.05 || 0.1;
+    const yAxisMin = yMin - yPad;
+    const yAxisMax = yMax + yPad;
+
+    const xAxisMin =
+      raw.length > 0
+        ? (() => {
+            const d = new Date(raw[0][0]);
+            d.setUTCHours(0, 0, 0, 0);
+            return d.getTime();
+          })()
+        : undefined;
 
     // Tooltip shows depth + m NAP when in depth mode, m NAP only otherwise
     const tooltipFormatter = (params: any[]) => {
@@ -192,26 +203,28 @@ export class WellChartComponent implements OnInit, OnChanges {
         data: ['Grondwaterstand', 'Mediaan (seizoen)', 'Bandbreedte P10–P90'],
         textStyle: { fontSize: 11 },
       },
-      xAxis: {
-        type: 'time',
-        min:
-          raw.length > 0
-            ? (() => {
-                const d = new Date(raw[0][0]);
-                d.setUTCHours(0, 0, 0, 0);
-                return d.getTime();
-              })()
-            : undefined,
-        max: now,
-        axisLabel: { fontSize: 11 },
-      },
+      xAxis: [
+        {
+          type: 'time',
+          min: xAxisMin,
+          max: now,
+          axisLabel: { fontSize: 11 },
+        },
+        {
+          type: 'time',
+          min: xAxisMin,
+          max: now,
+          show: false,
+          axisPointer: { show: false },
+        },
+      ],
       yAxis: [
         {
           type: 'value',
           name: useDepth ? 'Diepte onder maaiveld (m)' : 'm NAP',
           inverse: useDepth,
-          min: yMin - yPad,
-          max: yMax + yPad,
+          min: yAxisMin,
+          max: yAxisMax,
           nameTextStyle: { fontSize: 11 },
           axisLabel: { fontSize: 11, formatter: (v: number) => v.toFixed(2) },
         },
@@ -220,8 +233,8 @@ export class WellChartComponent implements OnInit, OnChanges {
           name: useDepth ? 'm NAP' : 'Diepte onder maaiveld (m)',
           position: 'right',
           inverse: useDepth,
-          min: yMin - yPad,
-          max: yMax + yPad,
+          min: yAxisMin,
+          max: yAxisMax,
           show: gl != null,
           splitLine: { show: false },
           nameTextStyle: { fontSize: 11 },
@@ -231,16 +244,32 @@ export class WellChartComponent implements OnInit, OnChanges {
               useDepth ? (gl! - v).toFixed(2) : gl != null ? (gl - v).toFixed(2) : '',
           },
         },
+        {
+          type: 'value',
+          show: false,
+          inverse: useDepth,
+          min: yAxisMin,
+          max: yAxisMax,
+        },
       ],
       dataZoom: [
-        { type: 'inside', start: 0, end: 100, filterMode: 'none' },
+        { type: 'inside', xAxisIndex: [0, 1], start: 0, end: 100, filterMode: 'none' },
         {
           type: 'slider',
+          xAxisIndex: [1, 0],
           bottom: 4,
-          height: 40,
+          height: 60,
           start: 0,
           end: 100,
           filterMode: 'none',
+          dataBackground: {
+            lineStyle: { color: '#1a6ebd', width: 1.5, opacity: 0.7 },
+            areaStyle: { opacity: 0 },
+          },
+          selectedDataBackground: {
+            lineStyle: { color: '#1a6ebd', width: 1.5, opacity: 1 },
+            areaStyle: { opacity: 0 },
+          },
           labelFormatter: (v: number) =>
             new Date(v).toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' }),
         },
@@ -321,6 +350,21 @@ export class WellChartComponent implements OnInit, OnChanges {
             ],
           },
         },
+        {
+          name: '__nav__',
+          type: 'line',
+          xAxisIndex: 1,
+          yAxisIndex: 2,
+          data: plotMeasurements,
+          connectNulls: false,
+          symbol: 'none',
+          lineStyle: { width: 0, opacity: 0 },
+          itemStyle: { opacity: 0 },
+          showInLegend: false,
+          tooltip: { show: false },
+          silent: true,
+          legendHoverLink: false,
+        } as any,
       ],
     };
 
