@@ -158,6 +158,9 @@ export class HomeComponent implements OnInit, OnDestroy {
           id: 'wells-circle',
           type: 'circle',
           source: 'wells',
+          layout: {
+            'circle-sort-key': ['case', ['==', ['get', 'classification'], null], 0, 1],
+          },
           paint: {
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3, 12, 7],
             'circle-color': [
