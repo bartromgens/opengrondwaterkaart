@@ -69,3 +69,37 @@ python manage.py compute_baselines
 ```
 
 The `scripts/` directory contains cron-ready shell scripts for the nightly pipeline (`nightly_ingest.sh`) and monthly baseline recomputation (`monthly_baselines.sh`).
+
+## Deployment
+
+Before deploying, make sure all local commits are pushed to `origin/master`. Then run:
+
+```bash
+./deploy.sh
+```
+
+This will SSH into the production server, pull the latest code, rebuild the Docker images, restart the containers, and run `migrate` and `collectstatic`.
+
+## Management commands on production
+
+Run management commands inside the `api` container on the production server:
+
+```bash
+docker compose -f docker-compose.prod.yml exec api python manage.py <command>
+```
+
+For example, to trigger a manual data ingestion:
+
+```bash
+docker compose -f docker-compose.prod.yml exec api python manage.py fetch_measurements
+```
+
+## Viewing production logs
+
+```bash
+# Follow logs from all containers
+docker compose -f docker-compose.prod.yml logs -f
+
+# Follow logs from a specific container (api, client, or db)
+docker compose -f docker-compose.prod.yml logs -f api
+```
