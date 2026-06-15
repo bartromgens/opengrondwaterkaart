@@ -3,6 +3,23 @@
   overflow-y: auto;
 }
 
+.about-nav {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid #e0e0e0;
+
+  .back-to-map {
+    color: #2196f3;
+
+    mat-icon {
+      margin-right: 0.25rem;
+    }
+  }
+}
+
 .about-container {
   max-width: 900px;
   margin: 0 auto;
