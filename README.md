@@ -10,6 +10,14 @@ Interactive map showing groundwater levels across the Netherlands for any select
 - **Measurements** — BRO REST API (`publiek.broservices.nl/gm/gld/v1`) per well, fetched incrementally. Only quality-approved (`goedgekeurd`) readings are stored, averaged to daily values in metres relative to NAP.
 - **Baselines** — Computed locally from stored measurements: per-well weekly (ISO week) or monthly percentiles (p5–p95) over a configurable minimum number of years.
 
+## Alternative websites
+
+- [Droogteportaal](https://www.droogteportaal.nl/) — best alternative with extensive drought information
+- [GWS in Beeld (Grondwatertools)](https://www.grondwatertools.nl/gwsinbeeld/) — outdated data
+- [Grondwaterkaart Drenthe](https://publiek.grondwater.jeng.io/) — groundwater data for Drenthe province
+- [Model Grondwaterspiegeldiepte (Bodemdata.nl)](https://bodemdata.nl/downloads) — downloadable model data
+- grondwater.nl/kaart — no longer working
+
 ## Setup
 
 ### Prerequisites

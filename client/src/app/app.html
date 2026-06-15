@@ -1,6 +1,16 @@
 <div class="app-shell">
   <mat-toolbar color="primary" class="app-toolbar">
-    <span class="app-title">OpenGrondWaterKaart</span>
+    <a routerLink="/" class="app-title">OpenGrondWaterKaart</a>
+    <span class="spacer"></span>
+    <a mat-button routerLink="/about" routerLinkActive="active-nav-link">Over</a>
+    <a
+      mat-icon-button
+      href="https://github.com/bartromgens/opengrondwaterkaart"
+      target="_blank"
+      aria-label="GitHub"
+    >
+      <mat-icon svgIcon="github"></mat-icon>
+    </a>
   </mat-toolbar>
   <div class="app-content">
     <router-outlet />

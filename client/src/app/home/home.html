@@ -32,9 +32,21 @@
       [max]="selectedDateIso"
       (change)="onDateInput($any($event.target).value)"
     />
-    <mat-slider class="date-slider" [min]="sliderMin" [max]="sliderMax" [step]="1" discrete>
-      <input matSliderThumb [value]="sliderValue" (valueChange)="onSliderChange($event)" />
-    </mat-slider>
+    <div class="slider-wrap">
+      <mat-slider class="date-slider" [min]="sliderMin" [max]="sliderMax" [step]="1">
+        <input matSliderThumb [value]="sliderValue" (valueChange)="onSliderDrag($event)" (dragEnd)="onSliderRelease()" />
+      </mat-slider>
+      <div class="month-ticks" aria-hidden="true">
+        @for (tick of monthTicks; track tick.pct) {
+          <span class="month-tick" [class.major]="tick.major" [style.left.%]="tick.pct">
+            <span class="tick-mark"></span>
+            @if (tick.label) {
+              <span class="tick-label">{{ tick.label }}</span>
+            }
+          </span>
+        }
+      </div>
+    </div>
     <span class="date-label">{{ formatDate(selectedDateIso) }}</span>
   </div>
 

@@ -1,0 +1,159 @@
+<div class="about-wrapper">
+  <section class="m-4 pb-4">
+    <div class="about-container">
+      <h1>Over OpenGrondWaterKaart</h1>
+
+      <section class="about-section">
+        <h2>Samenvatting</h2>
+        <p>
+          OpenGrondWaterKaart is een interactieve webtoepassing die grondwaterstanden in Nederland
+          visualiseert op een kaart. Voor elke dag waarover metingen beschikbaar zijn, is in één
+          oogopslag te zien hoe hoog of laag het grondwater staat ten opzichte van de historische
+          norm per locatie. Putten worden ingedeeld in vijf klassen: van zeer laag tot zeer hoog,
+          gebaseerd op seizoensgebonden percentielen.
+        </p>
+      </section>
+
+      <section class="about-section">
+        <h2>Doel</h2>
+        <p>
+          Het doel van OpenGrondWaterKaart is om grondwaterdata vrij toegankelijk te maken voor
+          iedereen. Of je nu boer, beleidsmaker, onderzoeker of gewoon nieuwsgierig bent: deze tool
+          helpt je grondwatertrends te verkennen voor heel Nederland. Door complexe meetdata op een
+          begrijpelijke manier te presenteren, willen we bijdragen aan beter inzicht in de
+          waterhuishouding en droogte- en wateroverlastproblematiek.
+        </p>
+      </section>
+
+      <section class="about-section">
+        <h2>Databronnen</h2>
+        <p>
+          OpenGrondWaterKaart gebruikt uitsluitend publiek beschikbare, officiële Nederlandse
+          grondwaterdata:
+        </p>
+
+        <h3>Putlocaties en metadata</h3>
+        <ul>
+          <li>
+            <strong>BRO Grondwatermonitoring in Samenhang:</strong> Putlocaties en karakteristieken
+            worden opgehaald via de
+            <a
+              href="https://service.pdok.nl/tno/bro-grondwatermonitoring-in-samenhang-karakteristieken/atom/index.xml"
+              target="_blank"
+              rel="noopener"
+              >PDOK ATOM-feed</a
+            >
+            als GeoPackage (TNO/BRO).
+          </li>
+        </ul>
+
+        <h3>Grondwatermetingen</h3>
+        <ul>
+          <li>
+            <strong>BRO REST API:</strong> Metingen worden incrementeel opgehaald via de
+            <a href="https://publiek.broservices.nl/gm/gld/v1" target="_blank" rel="noopener"
+              >BRO Grondwaterstandonderzoek API</a
+            >
+            (publiek.broservices.nl). Alleen kwaliteitsgoedgekeurde (<em>goedgekeurd</em>) metingen
+            worden opgeslagen, gemiddeld tot dagwaarden in meters ten opzichte van NAP.
+          </li>
+        </ul>
+
+        <h3>Seizoensgebonden basislijnen</h3>
+        <ul>
+          <li>
+            <strong>Lokaal berekend:</strong> Per put worden wekelijkse of maandelijkse percentielen
+            (p5–p95) berekend op basis van de opgeslagen metingen over een configureerbaar
+            minimumaantal jaren. Deze basislijnen bepalen de classificatie (zeer laag / laag /
+            normaal / hoog / zeer hoog) voor elke dag.
+          </li>
+        </ul>
+      </section>
+
+      <section class="about-section">
+        <h2>Alternatieve websites</h2>
+        <p>Er zijn ook andere websites die grondwaterdata voor Nederland aanbieden:</p>
+        <ul>
+          <li>
+            <a href="https://www.droogteportaal.nl/" target="_blank" rel="noopener"
+              >Droogteportaal</a
+            >
+            — beste alternatief met uitgebreide droogte-informatie
+          </li>
+          <li>
+            <a href="https://www.grondwatertools.nl/gwsinbeeld/" target="_blank" rel="noopener"
+              >GWS in Beeld (Grondwatertools)</a
+            >
+            — verouderde data
+          </li>
+          <li>
+            <a href="https://publiek.grondwater.jeng.io/" target="_blank" rel="noopener"
+              >Grondwaterkaart Drenthe</a
+            >
+            — grondwaterdata specifiek voor de provincie Drenthe
+          </li>
+          <li>
+            <a href="https://bodemdata.nl/downloads" target="_blank" rel="noopener"
+              >Model Grondwaterspiegeldiepte (Bodemdata.nl)</a
+            >
+            — downloadbare modeldata voor grondwaterspiegeldiepte
+          </li>
+          <li><span class="link-unavailable">grondwater.nl/kaart</span> — niet meer beschikbaar</li>
+        </ul>
+      </section>
+
+      <section class="about-section">
+        <h2>Open Source</h2>
+        <p>
+          OpenGrondWaterKaart is een
+          <strong>gratis en open source project</strong>, uitgebracht onder de
+          <a
+            href="https://github.com/bartromgens/opengrondwaterkaart/blob/master/LICENSE.md"
+            target="_blank"
+            rel="noopener"
+            >MIT-licentie</a
+          >. De volledige broncode is publiek beschikbaar op
+          <a
+            href="https://github.com/bartromgens/opengrondwaterkaart"
+            target="_blank"
+            rel="noopener"
+            >GitHub</a
+          >, en bijdragen zijn van harte welkom.
+        </p>
+
+        <h3>Niet-commercieel en onafhankelijk</h3>
+        <p>
+          OpenGrondWaterKaart is een niet-commercieel initiatief. De hostingkosten worden gedragen
+          door vrijwilligers die geloven in vrije toegang tot overheidsinformatie. Het project is
+          volledig onafhankelijk en niet gelieerd aan enige commerciële partij, politieke
+          organisatie of belangengroep.
+        </p>
+
+        <h3>Meewerken</h3>
+        <p>
+          Bijdragen van ontwikkelaars, hydrologen, ontwerpers en andere geïnteresseerden zijn
+          welkom. Wil je een bug melden, een functie voorstellen of code bijdragen? Bezoek dan onze
+          <a
+            href="https://github.com/bartromgens/opengrondwaterkaart"
+            target="_blank"
+            rel="noopener"
+            >GitHub-repository</a
+          >.
+        </p>
+      </section>
+
+      <section class="about-section">
+        <h2>Contact</h2>
+        <p>
+          Vragen, suggesties of problemen? Maak een issue aan op onze
+          <a
+            href="https://github.com/bartromgens/opengrondwaterkaart/issues"
+            target="_blank"
+            rel="noopener"
+            >GitHub Issues-pagina</a
+          >.
+        </p>
+      </section>
+    </div>
+  </section>
+</div>

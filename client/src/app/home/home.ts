@@ -44,6 +44,29 @@ TODAY.setHours(0, 0, 0, 0);
 const RANGE_START = addDays(TODAY, -2 * 365);
 const TOTAL_DAYS = Math.round((TODAY.getTime() - RANGE_START.getTime()) / 86400000);
 
+function buildMonthTicks(): { label: string; pct: number; major: boolean }[] {
+  const ticks: { label: string; pct: number; major: boolean }[] = [];
+  const d = new Date(RANGE_START);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + 1);
+  d.setHours(0, 0, 0, 0);
+  while (d.getTime() <= TODAY.getTime()) {
+    const days = Math.round((d.getTime() - RANGE_START.getTime()) / 86400000);
+    const pct = (days / TOTAL_DAYS) * 100;
+    const month = d.getMonth();
+    const major = month === 0 || month === 6;
+    const label =
+      month === 0
+        ? d.toLocaleDateString('nl-NL', { month: 'short', year: '2-digit' })
+        : month === 6
+          ? d.toLocaleDateString('nl-NL', { month: 'short' })
+          : '';
+    ticks.push({ label, pct, major });
+    d.setMonth(d.getMonth() + 1);
+  }
+  return ticks;
+}
+
 @Component({
   selector: 'app-home',
   imports: [
@@ -80,6 +103,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly classificationColors = CLASSIFICATION_COLORS;
   readonly classificationLabels = CLASSIFICATION_LABELS;
   readonly noDataColor = NO_DATA_COLOR;
+  readonly monthTicks = buildMonthTicks();
 
   /** Slider index: 0 = RANGE_START, TOTAL_DAYS = today */
   sliderValue = TOTAL_DAYS;
@@ -195,8 +219,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     }
   }
 
-  onSliderChange(value: number): void {
+  onSliderDrag(value: number): void {
     this.sliderValue = value;
+  }
+
+  onSliderRelease(): void {
     this.dateChange$.next();
   }
 
