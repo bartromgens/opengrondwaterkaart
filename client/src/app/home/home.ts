@@ -50,15 +50,24 @@ const JAN_FIRST_DAYS = Math.max(
   Math.min(TOTAL_DAYS, Math.round((JAN_FIRST.getTime() - RANGE_START.getTime()) / 86400000)),
 );
 
+function daysFromRangeStart(d: Date): number {
+  return Math.round((d.getTime() - RANGE_START.getTime()) / 86400000);
+}
+
+function sliderPct(days: number): number {
+  return (days / TOTAL_DAYS) * 100;
+}
+
 function buildMonthTicks(): { label: string; pct: number; major: boolean }[] {
   const ticks: { label: string; pct: number; major: boolean }[] = [];
-  const d = new Date(RANGE_START);
-  d.setDate(1);
-  d.setMonth(d.getMonth() + 1);
+  const d = new Date(RANGE_START.getFullYear(), RANGE_START.getMonth(), 1);
+  if (d < RANGE_START) {
+    d.setMonth(d.getMonth() + 1);
+  }
   d.setHours(0, 0, 0, 0);
   while (d.getTime() <= TODAY.getTime()) {
-    const days = Math.round((d.getTime() - RANGE_START.getTime()) / 86400000);
-    const pct = (days / TOTAL_DAYS) * 100;
+    const days = daysFromRangeStart(d);
+    const pct = sliderPct(days);
     const month = d.getMonth();
     const major = month === 0 || month === 6;
     const label =

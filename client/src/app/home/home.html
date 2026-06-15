@@ -37,11 +37,16 @@
     />
     <div class="slider-wrap">
       <mat-slider class="date-slider" [min]="sliderMin" [max]="sliderMax" [step]="1">
-        <input matSliderThumb [value]="sliderValue" (valueChange)="onSliderDrag($event)" (dragEnd)="onSliderRelease()" />
+        <input
+          matSliderThumb
+          [value]="sliderValue"
+          (valueChange)="onSliderDrag($event)"
+          (dragEnd)="onSliderRelease()"
+        />
       </mat-slider>
       <div class="month-ticks" aria-hidden="true">
         @for (tick of monthTicks; track tick.pct) {
-          <span class="month-tick" [class.major]="tick.major" [style.left.%]="tick.pct">
+          <span class="month-tick" [class.major]="tick.major" [style.--tick-pct]="tick.pct">
             <span class="tick-mark"></span>
             @if (tick.label) {
               <span class="tick-label">{{ tick.label }}</span>
