@@ -1,7 +1,7 @@
 <div class="map-layout">
   <div #mapContainer class="map-container"></div>
 
-  @if (loading()) {
+  @if (loading() || dateLoading()) {
     <div class="map-overlay-spinner">
       <mat-spinner diameter="40" />
     </div>
@@ -16,10 +16,26 @@
         <span>{{ classificationLabels[cls] }}</span>
       </div>
     }
-    <div class="legend-item stale-note">
-      <span class="legend-dot stale"></span>
-      <span>Verouderd (&gt;35d)</span>
+    <div class="legend-item">
+      <span class="legend-dot no-data"></span>
+      <span>Geen meting op deze dag</span>
     </div>
+  </div>
+
+  <!-- Date control bar -->
+  <div class="date-bar">
+    <input
+      class="date-input"
+      type="date"
+      [value]="selectedDateIso"
+      [min]="''"
+      [max]="selectedDateIso"
+      (change)="onDateInput($any($event.target).value)"
+    />
+    <mat-slider class="date-slider" [min]="sliderMin" [max]="sliderMax" [step]="1" discrete>
+      <input matSliderThumb [value]="sliderValue" (valueChange)="onSliderChange($event)" />
+    </mat-slider>
+    <span class="date-label">{{ formatDate(selectedDateIso) }}</span>
   </div>
 
   <!-- Freshness badge -->
@@ -45,22 +61,23 @@
         </button>
       </div>
 
-      <div
-        class="panel-classification"
-        [style.background]="classificationColors[selectedWell()!.status.classification]"
-      >
-        {{ classificationLabels[selectedWell()!.status.classification] }}
-        @if (selectedWell()!.status.is_stale) {
-          <span class="stale-tag">verouderd</span>
-        }
-      </div>
+      @if (selectedWell()!.status.classification) {
+        <div
+          class="panel-classification"
+          [style.background]="classificationColors[selectedWell()!.status.classification!]"
+        >
+          {{ classificationLabels[selectedWell()!.status.classification!] }}
+        </div>
+      } @else {
+        <div class="panel-classification no-data-badge">
+          Geen meting op {{ formatDate(selectedDateIso) }}
+        </div>
+      }
 
       <div class="panel-stats">
         <div class="stat">
           <span class="stat-label">Stand</span>
-          <span class="stat-value">{{
-            formatValue(selectedWell()!.status.latest_value_m_nap)
-          }}</span>
+          <span class="stat-value">{{ formatValue(selectedWell()!.status.value_m_nap) }}</span>
         </div>
         <div class="stat">
           <span class="stat-label">Percentiel</span>
@@ -68,9 +85,7 @@
         </div>
         <div class="stat">
           <span class="stat-label">Gemeten op</span>
-          <span class="stat-value">{{
-            formatDate(selectedWell()!.status.latest_measured_at)
-          }}</span>
+          <span class="stat-value">{{ formatDate(selectedWell()!.status.measured_on) }}</span>
         </div>
         @if (selectedWell()!.ground_level_m !== null) {
           <div class="stat">
@@ -81,7 +96,7 @@
       </div>
 
       @if (selectedWell()!.baseline) {
-        <div class="panel-section-label">Historische bandbreedte (week van meting)</div>
+        <div class="panel-section-label">Historische bandbreedte (week van selectie)</div>
         <div class="baseline-bar">
           <span class="baseline-label">P10</span>
           <span class="baseline-value">{{ formatValue(selectedWell()!.baseline!.p10) }}</span>
@@ -105,8 +120,6 @@
       } @else {
         <p class="no-data">Geen meetdata beschikbaar.</p>
       }
-
-
     </div>
   }
 

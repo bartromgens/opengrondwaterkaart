@@ -88,26 +88,6 @@ class Classification(models.TextChoices):
     NORMAL = "normal", "Normal"
     HIGH = "high", "High"
     VERY_HIGH = "very_high", "Very high"
-    UNKNOWN = "unknown", "Unknown"
-
-
-class WellStatus(models.Model):
-    well = models.OneToOneField(
-        Well, on_delete=models.CASCADE, related_name="status", primary_key=True
-    )
-    latest_value_m_nap = models.FloatField(null=True, blank=True)
-    latest_measured_at = models.DateTimeField(null=True, blank=True)
-    percentile = models.FloatField(null=True, blank=True)
-    classification = models.CharField(
-        max_length=10,
-        choices=Classification.choices,
-        default=Classification.UNKNOWN,
-    )
-    last_fetched_at = models.DateTimeField(null=True, blank=True)
-    is_stale = models.BooleanField(default=False)
-
-    def __str__(self) -> str:
-        return f"{self.well_id}: {self.classification}"
 
 
 class IngestRunStatus(models.TextChoices):

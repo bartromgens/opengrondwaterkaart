@@ -1,6 +1,6 @@
 # OpenGrondWaterKaart
 
-Interactive map showing current groundwater levels across the Netherlands.
+Interactive map showing groundwater levels across the Netherlands for any selected day.
 
 **Stack:** Django + GeoDjango + Django REST Framework (backend) · Angular + Angular Material (frontend) · PostGIS (database)
 
@@ -42,6 +42,17 @@ npm start
 
 The Angular dev server runs on [http://localhost:4200](http://localhost:4200) and proxies `/api` requests to the Django backend on port 8000.
 
+## Classification
+
+Wells are classified lazily per request for a user-selected day. When the API receives `GET /api/wells/?date=YYYY-MM-DD`:
+
+1. For each active well, look up its measurement on that exact date.
+2. Look up the seasonal baseline (ISO-week percentiles) for that date's week.
+3. Interpolate the measurement's percentile rank within the baseline and map it to one of five classes: `very_low` / `low` / `normal` / `high` / `very_high`.
+4. Wells with no measurement on the selected date, or no baseline for that week, are returned as grey (no classification).
+
+This means comparisons are always fair: all visible colours reflect conditions on the same day.
+
 ## Data ingestion
 
 Run these management commands in order to populate the database.
@@ -55,10 +66,6 @@ python manage.py fetch_measurements
 
 # 3. (Re)compute seasonal baseline percentiles — run monthly
 python manage.py compute_baselines
-
-# 4. Classify each well relative to its historical baseline
-python manage.py refresh_status
-
 ```
 
 The `scripts/` directory contains cron-ready shell scripts for the nightly pipeline (`nightly_ingest.sh`) and monthly baseline recomputation (`monthly_baselines.sh`).

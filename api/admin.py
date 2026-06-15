@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.gis.admin import GISModelAdmin
 
-from .models import IngestRun, Measurement, Well, WellBaseline, WellStatus
+from .models import IngestRun, Measurement, Well, WellBaseline
 
 
 @admin.register(Well)
@@ -29,20 +29,6 @@ class WellAdmin(GISModelAdmin):
         if obj.location is None:
             return ""
         return f"{obj.location.y:.5f}, {obj.location.x:.5f}"
-
-
-@admin.register(WellStatus)
-class WellStatusAdmin(admin.ModelAdmin):
-    list_display = (
-        "well",
-        "latest_value_m_nap",
-        "latest_measured_at",
-        "percentile",
-        "classification",
-        "last_fetched_at",
-        "is_stale",
-    )
-    list_filter = ("classification", "is_stale")
 
 
 @admin.register(Measurement)

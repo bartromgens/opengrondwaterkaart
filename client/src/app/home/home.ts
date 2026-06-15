@@ -1,33 +1,59 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
+import { MatSliderModule } from '@angular/material/slider';
+import { Subject } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import * as maplibregl from 'maplibre-gl';
 
 import { WellDetail, WellSeries, WellsService } from '../wells.service';
 import { WellChartComponent } from '../well-chart-dialog/well-chart-dialog';
 
-const CLASSIFICATION_COLORS: { [key: string]: string } = {
+const CLASSIFICATION_COLORS: Record<string, string> = {
   very_low: '#d73027',
   low: '#fc8d59',
   normal: '#91bfdb',
   high: '#4575b4',
   very_high: '#313695',
-  unknown: '#aaaaaa',
 };
 
-const CLASSIFICATION_LABELS: { [key: string]: string } = {
+const NO_DATA_COLOR = '#cccccc';
+
+const CLASSIFICATION_LABELS: Record<string, string> = {
   very_low: 'Zeer laag',
   low: 'Laag',
   normal: 'Normaal',
   high: 'Hoog',
   very_high: 'Zeer hoog',
-  unknown: 'Onbekend',
 };
+
+function toIso(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+const TODAY = new Date();
+TODAY.setHours(0, 0, 0, 0);
+const RANGE_START = addDays(TODAY, -2 * 365);
+const TOTAL_DAYS = Math.round((TODAY.getTime() - RANGE_START.getTime()) / 86400000);
 
 @Component({
   selector: 'app-home',
-  imports: [CommonModule, MatProgressSpinnerModule, MatIconModule, WellChartComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MatProgressSpinnerModule,
+    MatIconModule,
+    MatSliderModule,
+    WellChartComponent,
+  ],
   templateUrl: './home.html',
   styleUrl: './home.scss',
 })
@@ -35,11 +61,13 @@ export class HomeComponent implements OnInit, OnDestroy {
   @ViewChild('mapContainer', { static: true }) mapContainer!: ElementRef<HTMLDivElement>;
 
   private wellsService = inject(WellsService);
+  private dateChange$ = new Subject<void>();
 
   map: maplibregl.Map | null = null;
   popup: maplibregl.Popup | null = null;
 
   loading = signal(true);
+  dateLoading = signal(false);
   lastUpdated = signal<string | null>(null);
   totalWells = signal(0);
 
@@ -51,14 +79,31 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly classifications = Object.keys(CLASSIFICATION_LABELS);
   readonly classificationColors = CLASSIFICATION_COLORS;
   readonly classificationLabels = CLASSIFICATION_LABELS;
+  readonly noDataColor = NO_DATA_COLOR;
+
+  /** Slider index: 0 = RANGE_START, TOTAL_DAYS = today */
+  sliderValue = TOTAL_DAYS;
+  readonly sliderMin = 0;
+  readonly sliderMax = TOTAL_DAYS;
+
+  get selectedDate(): Date {
+    return addDays(RANGE_START, this.sliderValue);
+  }
+
+  get selectedDateIso(): string {
+    return toIso(this.selectedDate);
+  }
 
   ngOnInit(): void {
     this.initMap();
     this.loadMeta();
+
+    this.dateChange$.pipe(debounceTime(200)).subscribe(() => this.onDateChanged());
   }
 
   ngOnDestroy(): void {
     this.map?.remove();
+    this.dateChange$.complete();
   }
 
   private initMap(): void {
@@ -75,7 +120,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private loadWells(): void {
-    this.wellsService.getWells().subscribe({
+    this.wellsService.getWells(this.selectedDateIso).subscribe({
       next: (geojson) => {
         this.loading.set(false);
         const map = this.map!;
@@ -92,23 +137,27 @@ export class HomeComponent implements OnInit, OnDestroy {
           paint: {
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3, 12, 7],
             'circle-color': [
-              'match',
-              ['get', 'classification'],
-              'very_low',
-              CLASSIFICATION_COLORS['very_low'],
-              'low',
-              CLASSIFICATION_COLORS['low'],
-              'normal',
-              CLASSIFICATION_COLORS['normal'],
-              'high',
-              CLASSIFICATION_COLORS['high'],
-              'very_high',
-              CLASSIFICATION_COLORS['very_high'],
-              CLASSIFICATION_COLORS['unknown'],
+              'case',
+              ['==', ['get', 'classification'], null],
+              NO_DATA_COLOR,
+              [
+                'match',
+                ['get', 'classification'],
+                'very_low',
+                CLASSIFICATION_COLORS['very_low'],
+                'low',
+                CLASSIFICATION_COLORS['low'],
+                'normal',
+                CLASSIFICATION_COLORS['normal'],
+                'high',
+                CLASSIFICATION_COLORS['high'],
+                'very_high',
+                CLASSIFICATION_COLORS['very_high'],
+                NO_DATA_COLOR,
+              ],
             ],
-            'circle-opacity': ['case', ['get', 'is_stale'], 0.4, 1.0],
-            'circle-stroke-width': ['case', ['get', 'is_stale'], 1, 0],
-            'circle-stroke-color': '#ffffff',
+            'circle-opacity': 1.0,
+            'circle-stroke-width': 0,
           },
         });
 
@@ -124,6 +173,42 @@ export class HomeComponent implements OnInit, OnDestroy {
     });
   }
 
+  private onDateChanged(): void {
+    const dateIso = this.selectedDateIso;
+    const source = this.map?.getSource('wells') as maplibregl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    this.dateLoading.set(true);
+    this.wellsService.getWells(dateIso).subscribe({
+      next: (geojson) => {
+        source.setData(geojson as any);
+        this.dateLoading.set(false);
+      },
+      error: () => this.dateLoading.set(false),
+    });
+
+    const well = this.selectedWell();
+    if (well) {
+      this.wellsService.getWellDetail(well.bro_id, dateIso).subscribe({
+        next: (detail) => this.selectedWell.set(detail),
+      });
+    }
+  }
+
+  onSliderChange(value: number): void {
+    this.sliderValue = value;
+    this.dateChange$.next();
+  }
+
+  onDateInput(value: string): void {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return;
+    d.setHours(0, 0, 0, 0);
+    const days = Math.round((d.getTime() - RANGE_START.getTime()) / 86400000);
+    this.sliderValue = Math.max(0, Math.min(TOTAL_DAYS, days));
+    this.dateChange$.next();
+  }
+
   private onWellClick(e: maplibregl.MapLayerMouseEvent): void {
     const features = e.features;
     if (!features || features.length === 0) return;
@@ -135,7 +220,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.series.set(null);
     this.seriesLoading.set(true);
 
-    this.wellsService.getWellDetail(broId).subscribe({
+    this.wellsService.getWellDetail(broId, this.selectedDateIso).subscribe({
       next: (detail) => {
         this.selectedWell.set(detail);
         this.showChart.set(true);
@@ -147,7 +232,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private loadSeries(broId: string): void {
-    this.wellsService.getWellSeries(broId).subscribe({
+    this.wellsService.getWellSeries(broId, { date: this.selectedDateIso }).subscribe({
       next: (s) => {
         this.series.set(s);
         this.seriesLoading.set(false);

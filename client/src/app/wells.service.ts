@@ -2,14 +2,14 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
-export type Classification = 'very_low' | 'low' | 'normal' | 'high' | 'very_high' | 'unknown';
+export type Classification = 'very_low' | 'low' | 'normal' | 'high' | 'very_high';
 
 export interface WellProperties {
   id: string;
-  classification: Classification;
+  classification: Classification | null;
   percentile: number | null;
-  latest_measured_at: string | null;
-  is_stale: boolean;
+  value_m_nap: number | null;
+  measured_on: string | null;
 }
 
 export interface WellFeature {
@@ -34,12 +34,10 @@ export interface WellDetail {
   screen_top_m: number | null;
   screen_bottom_m: number | null;
   status: {
-    latest_value_m_nap: number | null;
-    latest_measured_at: string | null;
+    value_m_nap: number | null;
+    measured_on: string | null;
     percentile: number | null;
-    classification: Classification;
-    last_fetched_at: string | null;
-    is_stale: boolean;
+    classification: Classification | null;
   };
   baseline: {
     p10: number;
@@ -72,7 +70,6 @@ export interface WellSeries {
 
 export interface MetaResponse {
   last_updated: string | null;
-  classification_counts: Record<string, number>;
   total_wells: number;
 }
 
@@ -80,22 +77,26 @@ export interface MetaResponse {
 export class WellsService {
   private http = inject(HttpClient);
 
-  getWells(bbox?: [number, number, number, number]): Observable<WellsGeoJSON> {
-    let params = new HttpParams();
+  getWells(date: string, bbox?: [number, number, number, number]): Observable<WellsGeoJSON> {
+    let params = new HttpParams().set('date', date);
     if (bbox) {
       params = params.set('bbox', bbox.join(','));
     }
     return this.http.get<WellsGeoJSON>('/api/wells/', { params });
   }
 
-  getWellDetail(broId: string): Observable<WellDetail> {
-    return this.http.get<WellDetail>(`/api/wells/${broId}/`);
+  getWellDetail(broId: string, date: string): Observable<WellDetail> {
+    const params = new HttpParams().set('date', date);
+    return this.http.get<WellDetail>(`/api/wells/${broId}/`, { params });
   }
 
-  getWellSeries(broId: string, opts?: { full?: boolean }): Observable<WellSeries> {
+  getWellSeries(broId: string, opts?: { full?: boolean; date?: string }): Observable<WellSeries> {
     let params = new HttpParams();
     if (opts?.full) {
       params = params.set('full', '1');
+    }
+    if (opts?.date) {
+      params = params.set('date', opts.date);
     }
     return this.http.get<WellSeries>(`/api/wells/${broId}/series/`, { params });
   }

@@ -15,7 +15,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone as django_timezone
 
 from api.management.dev_bbox import filter_wells_by_dev_bbox, write_dev_bbox_notice
-from api.models import IngestRun, IngestRunStatus, Measurement, Well, WellStatus
+from api.models import IngestRun, IngestRunStatus, Measurement, Well
 
 GLD_BASE_URL = "https://publiek.broservices.nl/gm/gld/v1/objects/{gld_bro_id}"
 OBSERVATIONS_SUMMARY_URL = GLD_BASE_URL + "/observationsSummary"
@@ -26,16 +26,8 @@ SWE_NS = "http://www.opengis.net/swe/2.0"
 XLINK_NS = "http://www.w3.org/1999/xlink"
 
 CHUNK_SIZE = 200
-# Per-observation fetches are one HTTP call per summary entry (~daily). Beyond
-# this window, fetch the full GLD object once instead of hundreds of requests.
 GLD_OBJECT_TIMEOUT = 120
 logger = logging.getLogger(__name__)
-STATUS_UPDATE_FIELDS = [
-    "last_fetched_at",
-    "latest_measured_at",
-    "latest_value_m_nap",
-    "is_stale",
-]
 
 
 def _format_duration(seconds: float) -> str:
@@ -163,7 +155,6 @@ def _parse_tvp_xml(content: bytes) -> list[tuple[datetime, float, str]]:
                 (time_el.text or "").strip().replace("Z", "+00:00")
             )
             val = float(value_el.text or "")
-            # Quality is in the TVPMeasurementMetadata qualifier
             quality = ""
             qual_el = tvp.find(
                 f".//{{{WATERML_NS}}}TVPMeasurementMetadata"
@@ -180,11 +171,11 @@ def _parse_tvp_xml(content: bytes) -> list[tuple[datetime, float, str]]:
 
 
 def _fetch_since(
-    last_fetched_at: datetime | None, retention_cutoff: datetime
+    last_measured_at: datetime | None, retention_cutoff: datetime
 ) -> datetime:
-    if last_fetched_at is None or last_fetched_at < retention_cutoff:
+    if last_measured_at is None or last_measured_at < retention_cutoff:
         return retention_cutoff
-    return last_fetched_at
+    return last_measured_at
 
 
 def _filter_since(
@@ -286,27 +277,37 @@ def _well_chunks(qs: Any, chunk_size: int) -> Iterator[list[Well]]:
         yield chunk
 
 
-def _statuses_for_wells(wells: list[Well]) -> dict[int, WellStatus]:
-    well_ids = [well.id for well in wells]
-    statuses = {
-        status.well_id: status
-        for status in WellStatus.objects.filter(well_id__in=well_ids)
+def _last_measured_for_wells(wells: list[Well]) -> dict[int, datetime]:
+    """Return {well_id: last measured_on as datetime} for a list of wells."""
+    from django.db.models import Max
+
+    well_ids = [w.id for w in wells]
+    rows = (
+        Measurement.objects.filter(well_id__in=well_ids)
+        .values("well_id")
+        .annotate(last_date=Max("measured_on"))
+    )
+    tz = django_timezone.get_current_timezone()
+    return {
+        row["well_id"]: datetime(
+            row["last_date"].year,
+            row["last_date"].month,
+            row["last_date"].day,
+            tzinfo=tz,
+        )
+        for row in rows
+        if row["last_date"] is not None
     }
-    for well in wells:
-        if well.id not in statuses:
-            status, _ = WellStatus.objects.get_or_create(well=well)
-            statuses[well.id] = status
-    return statuses
 
 
 def _fetch_well_measurements(
     well: Well,
-    last_fetched_at: datetime | None,
+    last_measured_at: datetime | None,
     retention_cutoff: datetime,
     bucket: TokenBucket,
 ) -> FetchResult:
     try:
-        since = _fetch_since(last_fetched_at, retention_cutoff)
+        since = _fetch_since(last_measured_at, retention_cutoff)
         observations = _fetch_gld(well.gld_bro_id, since, bucket)
         return FetchResult(well=well, observations=observations)
     except Exception as exc:
@@ -315,7 +316,7 @@ def _fetch_well_measurements(
 
 def _fetch_wells_parallel(
     wells: list[Well],
-    statuses: dict[int, WellStatus],
+    last_measured: dict[int, datetime],
     retention_cutoff: datetime,
     bucket: TokenBucket,
     *,
@@ -326,7 +327,7 @@ def _fetch_wells_parallel(
             executor.submit(
                 _fetch_well_measurements,
                 well,
-                statuses[well.id].last_fetched_at,
+                last_measured.get(well.id),
                 retention_cutoff,
                 bucket,
             )
@@ -336,33 +337,9 @@ def _fetch_wells_parallel(
             yield future.result()
 
 
-def _apply_fetch_result(
-    result: FetchResult,
-    status: WellStatus,
-    *,
-    now: datetime,
-    stale_days: int,
-) -> None:
+def _apply_fetch_result(result: FetchResult) -> None:
     daily_obs = _aggregate_daily(result.observations)
     _upsert_measurements(result.well, daily_obs)
-    status.last_fetched_at = now
-    if daily_obs:
-        latest_date, latest_val = max(daily_obs, key=lambda x: x[0])
-        latest_dt = datetime(
-            latest_date.year,
-            latest_date.month,
-            latest_date.day,
-            tzinfo=now.tzinfo,
-        )
-        if status.latest_measured_at is None or latest_dt > status.latest_measured_at:
-            status.latest_measured_at = latest_dt
-            status.latest_value_m_nap = latest_val
-
-    if status.latest_measured_at:
-        age = now - status.latest_measured_at
-        status.is_stale = age.days > stale_days
-    else:
-        status.is_stale = True
 
 
 class Command(BaseCommand):
@@ -379,8 +356,8 @@ class Command(BaseCommand):
             "--reset",
             action="store_true",
             help=(
-                "Clear last_fetched_at for selected wells so data is fetched "
-                "from MEASUREMENT_RETENTION_DAYS ago."
+                "Force full re-fetch from MEASUREMENT_RETENTION_DAYS ago, "
+                "ignoring the latest stored measurement date."
             ),
         )
 
@@ -390,7 +367,6 @@ class Command(BaseCommand):
         rate = getattr(settings, "BRO_RATE_LIMIT_RPS", 3)
         workers = getattr(settings, "BRO_PARALLEL_WORKERS", max(3, int(rate * 2)))
         bucket = TokenBucket(rate)
-        stale_days = getattr(settings, "STALE_THRESHOLD_DAYS", 35)
         retention_days = getattr(settings, "MEASUREMENT_RETENTION_DAYS", 365)
         now = django_timezone.now()
         retention_cutoff = now - timedelta(days=retention_days)
@@ -414,15 +390,6 @@ class Command(BaseCommand):
         write_dev_bbox_notice(self.stdout)
         if limit:
             wells = wells[:limit]
-
-        if options["reset"]:
-            well_ids = list(wells.values_list("id", flat=True))
-            reset_count = WellStatus.objects.filter(well_id__in=well_ids).update(
-                last_fetched_at=None
-            )
-            self.stdout.write(
-                f"Reset last_fetched_at for {reset_count} of {len(well_ids)} wells."
-            )
 
         total = wells.count()
         self.stdout.write(
@@ -449,11 +416,10 @@ class Command(BaseCommand):
                 self.stdout.flush()
 
         for chunk in _well_chunks(wells, CHUNK_SIZE):
-            statuses = _statuses_for_wells(chunk)
-            statuses_to_update: list[WellStatus] = []
+            last_measured = {} if options["reset"] else _last_measured_for_wells(chunk)
 
             for result in _fetch_wells_parallel(
-                chunk, statuses, retention_cutoff, bucket, workers=workers
+                chunk, last_measured, retention_cutoff, bucket, workers=workers
             ):
                 well = result.well
                 completed += 1
@@ -463,14 +429,9 @@ class Command(BaseCommand):
                     log_progress()
                     continue
 
-                status = statuses[well.id]
-                _apply_fetch_result(result, status, now=now, stale_days=stale_days)
-                statuses_to_update.append(status)
+                _apply_fetch_result(result)
                 processed += 1
                 log_progress()
-
-            if statuses_to_update:
-                WellStatus.objects.bulk_update(statuses_to_update, STATUS_UPDATE_FIELDS)
 
         run.wells_processed = processed
         run.finished_at = django_timezone.now()
