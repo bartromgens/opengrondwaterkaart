@@ -10,6 +10,12 @@
   z-index: 100;
 }
 
+.app-title {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+}
+
 .app-content {
   flex: 1;
   overflow: hidden;
