@@ -41,6 +41,9 @@ ENV/
 # Django local settings
 config/settings_local.py
 
+# Collected static files
+staticfiles/
+
 # Node / Angular
 client/node_modules/
 client/dist/

@@ -1,0 +1,27 @@
+# Production settings override.
+# Copy this file to settings_local.py on the VPS and fill in the values.
+# settings_local.py is gitignored and will not be committed.
+
+SECRET_KEY = "change-me-to-a-long-random-string"
+
+DEBUG = False
+
+ALLOWED_HOSTS = ["opengrondwaterkaart.nl", "www.opengrondwaterkaart.nl"]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://opengrondwaterkaart.nl",
+    "https://www.opengrondwaterkaart.nl",
+]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# PostGIS -- matches the db service in docker-compose.prod.yml
+DATABASES = {
+    "default": {
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "NAME": "opengrondwaterkaart",
+        "USER": "opengrondwaterkaart",
+        "PASSWORD": "",
+        "HOST": "db",
+        "PORT": "5432",
+    }
+}

@@ -22,6 +22,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -75,9 +76,6 @@ SGI_MIN_YEARS = 5
 # Rolling measurement retention window (days)
 MEASUREMENT_RETENTION_DAYS = 9 * 365
 
-# Mark a well stale if latest measurement is older than this many days
-STALE_THRESHOLD_DAYS = 35
-
 # PDOK GM-in-samenhang ATOM feed (used by bootstrap_wells for bulk well + GLD linking)
 SAMENHANG_ATOM_URL = (
     "https://service.pdok.nl/tno/bro-grondwatermonitoring-in-samenhang-karakteristieken"
@@ -120,6 +118,15 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
