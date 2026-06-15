@@ -44,6 +44,12 @@ TODAY.setHours(0, 0, 0, 0);
 const RANGE_START = addDays(TODAY, -2 * 365);
 const TOTAL_DAYS = Math.round((TODAY.getTime() - RANGE_START.getTime()) / 86400000);
 
+const JAN_FIRST = new Date(TODAY.getFullYear(), 0, 1);
+const JAN_FIRST_DAYS = Math.max(
+  0,
+  Math.min(TOTAL_DAYS, Math.round((JAN_FIRST.getTime() - RANGE_START.getTime()) / 86400000)),
+);
+
 function buildMonthTicks(): { label: string; pct: number; major: boolean }[] {
   const ticks: { label: string; pct: number; major: boolean }[] = [];
   const d = new Date(RANGE_START);
@@ -106,7 +112,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly monthTicks = buildMonthTicks();
 
   /** Slider index: 0 = RANGE_START, TOTAL_DAYS = today */
-  sliderValue = TOTAL_DAYS;
+  sliderValue = JAN_FIRST_DAYS;
   readonly sliderMin = 0;
   readonly sliderMax = TOTAL_DAYS;
 
