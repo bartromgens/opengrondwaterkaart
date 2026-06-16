@@ -1,6 +1,9 @@
+import logging
 from typing import Any
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 from django.contrib.gis.geos import Point, Polygon
 
 
@@ -36,7 +39,7 @@ def point_in_dev_bbox(lon: float, lat: float) -> bool:
     return poly.contains(Point(lon, lat, srid=4326))
 
 
-def write_dev_bbox_notice(stdout: Any) -> None:
+def write_dev_bbox_notice() -> None:
     bbox = get_dev_bbox()
     if bbox:
-        stdout.write(f"Dev bbox filter active: {bbox}")
+        logger.info("Dev bbox filter active: %s", bbox)

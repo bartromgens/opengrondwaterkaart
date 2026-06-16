@@ -1,3 +1,4 @@
+import logging
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
@@ -7,6 +8,8 @@ from typing import Any, Generator
 
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 SAMENHANG_ATOM_URL = (
     "https://service.pdok.nl/tno/bro-grondwatermonitoring-in-samenhang-karakteristieken"
@@ -53,17 +56,13 @@ def _find_gpkg_url(atom_url: str) -> str:
 
 
 @contextmanager
-def download_samenhang_gpkg(
-    stdout: Any = None,
-) -> Generator[str, None, None]:
+def download_samenhang_gpkg() -> Generator[str, None, None]:
     """Download the samenhang GeoPackage and yield the local .gpkg path."""
     atom_url = _atom_url()
-    if stdout:
-        stdout.write(f"Resolving samenhang ATOM feed: {atom_url}")
+    logger.info("Resolving samenhang ATOM feed: %s", atom_url)
 
     gpkg_url = _find_gpkg_url(atom_url)
-    if stdout:
-        stdout.write(f"Downloading: {gpkg_url}")
+    logger.info("Downloading: %s", gpkg_url)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         resp = requests.get(gpkg_url, timeout=600, stream=True)

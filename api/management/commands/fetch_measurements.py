@@ -387,14 +387,16 @@ class Command(BaseCommand):
             )
             .order_by("id")
         )
-        write_dev_bbox_notice(self.stdout)
+        write_dev_bbox_notice()
         if limit:
             wells = wells[:limit]
 
         total = wells.count()
-        self.stdout.write(
-            f"Fetching measurements for {total} active wells "
-            f"({workers} workers @ {rate} req/s)..."
+        logger.info(
+            "Fetching measurements for %d active wells (%d workers @ %s req/s)...",
+            total,
+            workers,
+            rate,
         )
 
         last_logged_pct = 0
@@ -412,8 +414,9 @@ class Command(BaseCommand):
                     elapsed = time.monotonic() - started_at
                     remaining = (total - completed) * elapsed / completed
                     eta = f", ETA {_format_duration(remaining)}"
-                self.stdout.write(f"  {completed}/{total} ({last_logged_pct}%){eta}")
-                self.stdout.flush()
+                logger.info(
+                    "  %d/%d (%d%%)%s", completed, total, last_logged_pct, eta
+                )
 
         for chunk in _well_chunks(wells, CHUNK_SIZE):
             last_measured = {} if options["reset"] else _last_measured_for_wells(chunk)
@@ -425,7 +428,7 @@ class Command(BaseCommand):
                 completed += 1
                 if result.error:
                     errors.append(f"{well.bro_id}: {result.error}")
-                    self.stderr.write(f"  Error {well.bro_id}: {result.error}")
+                    logger.error("Error %s: %s", well.bro_id, result.error)
                     log_progress()
                     continue
 
@@ -439,8 +442,6 @@ class Command(BaseCommand):
         run.status = IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
         run.save()
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Done. Processed {processed} wells, {len(errors)} errors."
-            )
+        logger.info(
+            "Done. Processed %d wells, %d errors.", processed, len(errors)
         )

@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import Any
 
@@ -18,6 +19,7 @@ from api.models import (
 )
 
 PERCENTILES = [5, 10, 25, 50, 75, 90, 95]
+logger = logging.getLogger(__name__)
 
 
 def _load_observations_from_db(well: Well) -> list[tuple[date, float]]:
@@ -163,7 +165,7 @@ class Command(BaseCommand):
             )
             .order_by("id")
         )
-        write_dev_bbox_notice(self.stdout)
+        write_dev_bbox_notice()
         if skip_existing:
             wells_with_baselines = (
                 WellBaseline.objects.filter(period_type=period_type)
@@ -176,9 +178,11 @@ class Command(BaseCommand):
             wells = wells[:limit]
 
         total = wells.count()
-        self.stdout.write(
-            f"Computing {period_type} baselines for {total} wells "
-            f"(min {min_years} samples/period)..."
+        logger.info(
+            "Computing %s baselines for %d wells (min %d samples/period)...",
+            period_type,
+            total,
+            min_years,
         )
 
         for well in wells.iterator(chunk_size=100):
@@ -192,13 +196,17 @@ class Command(BaseCommand):
                 processed += 1
 
                 if processed % 50 == 0:
-                    self.stdout.write(
-                        f"  {processed}/{total} (last: {well.bro_id}, {saved} periods)"
+                    logger.info(
+                        "  %d/%d (last: %s, %d periods)",
+                        processed,
+                        total,
+                        well.bro_id,
+                        saved,
                     )
 
             except Exception as exc:
                 errors.append(f"{well.bro_id}: {exc}")
-                self.stderr.write(f"  Error {well.bro_id}: {exc}")
+                logger.error("Error %s: %s", well.bro_id, exc)
 
         run.wells_processed = processed
         run.finished_at = django_timezone.now()
@@ -206,8 +214,6 @@ class Command(BaseCommand):
         run.status = IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
         run.save()
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Done. {processed} wells processed, {len(errors)} errors."
-            )
+        logger.info(
+            "Done. %d wells processed, %d errors.", processed, len(errors)
         )

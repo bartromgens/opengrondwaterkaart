@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import Any
 
@@ -18,6 +19,7 @@ from api.management.samenhang import (
 from api.models import IngestRun, IngestRunStatus, Well
 
 BATCH_SIZE = 500
+logger = logging.getLogger(__name__)
 UPDATE_FIELDS = [
     "location",
     "tube_number",
@@ -102,27 +104,27 @@ class Command(BaseCommand):
         now = django_timezone.now()
 
         try:
-            with download_samenhang_gpkg(stdout=self.stdout) as gpkg_path:
-                self.stdout.write("Building GLD link map...")
+            with download_samenhang_gpkg() as gpkg_path:
+                logger.info("Building GLD link map...")
                 link_map = _build_link_map(gpkg_path)
-                self.stdout.write(f"  {len(link_map)} wells have a GLD link in kenset")
+                logger.info(
+                    "  %d wells have a GLD link in kenset", len(link_map)
+                )
 
-                self.stdout.write("Building tube screen positions...")
+                logger.info("Building tube screen positions...")
                 tube_extras = _build_tube_extras(gpkg_path)
 
-                write_dev_bbox_notice(self.stdout)
+                write_dev_bbox_notice()
                 self._upsert_wells(gpkg_path, link_map, tube_extras, now, errors)
 
             run.wells_processed = Well.objects.count()
             run.status = IngestRunStatus.SUCCESS
-            self.stdout.write(
-                self.style.SUCCESS(f"Done. Wells in DB: {run.wells_processed}")
-            )
+            logger.info("Done. Wells in DB: %d", run.wells_processed)
 
         except Exception as exc:
             errors.append(str(exc))
             run.status = IngestRunStatus.FAILED
-            self.stderr.write(self.style.ERROR(f"bootstrap_wells failed: {exc}"))
+            logger.error("bootstrap_wells failed: %s", exc)
 
         run.finished_at = django_timezone.now()
         run.errors_json = errors
@@ -141,7 +143,7 @@ class Command(BaseCommand):
         with fiona.open(gpkg_path, layer=LAYER_GMW) as src:
             total_features = len(src)
 
-        self.stdout.write(f"Processing {total_features} GMW features...")
+        logger.info("Processing %d GMW features...", total_features)
 
         to_create: list[Well] = []
         to_update: list[Well] = []
@@ -214,7 +216,7 @@ class Command(BaseCommand):
                         to_update = []
 
                     if (i + 1) % 5000 == 0:
-                        self.stdout.write(f"  {i + 1}/{total_features}")
+                        logger.info("  %d/%d", i + 1, total_features)
 
                 except Exception as exc:
                     errors.append(f"feature {i}: {exc}")
@@ -224,7 +226,8 @@ class Command(BaseCommand):
         if to_update:
             Well.objects.bulk_update(to_update, UPDATE_FIELDS)
 
-        self.stdout.write(
-            f"Upserted {processed} wells "
-            f"({len(link_map)} GLD links available in kenset)."
+        logger.info(
+            "Upserted %d wells (%d GLD links available in kenset).",
+            processed,
+            len(link_map),
         )
