@@ -1,8 +1,10 @@
+import io
 import logging
 import threading
 import time
 import xml.etree.ElementTree as ET
 from collections import defaultdict
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -10,7 +12,7 @@ from typing import Any, Iterator
 
 import requests
 from django.conf import settings
-from django.db import models
+from django.db import close_old_connections, models
 from django.core.management.base import BaseCommand
 from django.utils import timezone as django_timezone
 
@@ -138,36 +140,40 @@ def _observations_since(
     return relevant
 
 
-def _parse_tvp_xml(content: bytes) -> list[tuple[datetime, float, str]]:
-    results: list[tuple[datetime, float, str]] = []
+def _parse_tvp_xml(content: bytes) -> Iterator[tuple[datetime, float, str]]:
+    """Yield (timestamp, value, quality) from XML, clearing tree nodes incrementally."""
+    tvp_tag = f"{{{WATERML_NS}}}MeasurementTVP"
+    root = None
     try:
-        root = ET.fromstring(content)
+        for event, elem in ET.iterparse(io.BytesIO(content), events=("start", "end")):
+            if event == "start" and root is None:
+                root = elem
+                continue
+            if event == "end" and elem.tag == tvp_tag:
+                time_el = elem.find(f"{{{WATERML_NS}}}time")
+                value_el = elem.find(f"{{{WATERML_NS}}}value")
+                if time_el is not None and value_el is not None:
+                    try:
+                        ts = datetime.fromisoformat(
+                            (time_el.text or "").strip().replace("Z", "+00:00")
+                        )
+                        val = float(value_el.text or "")
+                        quality = ""
+                        qual_el = elem.find(
+                            f".//{{{WATERML_NS}}}TVPMeasurementMetadata"
+                            f"/{{{WATERML_NS}}}qualifier"
+                            f"/{{{SWE_NS}}}Category"
+                            f"/{{{SWE_NS}}}value"
+                        )
+                        if qual_el is not None and qual_el.text:
+                            quality = qual_el.text.strip()
+                        yield (ts, val, quality)
+                    except (ValueError, TypeError):
+                        pass
+                if root is not None:
+                    root.clear()
     except ET.ParseError:
-        return results
-
-    for tvp in root.iter(f"{{{WATERML_NS}}}MeasurementTVP"):
-        time_el = tvp.find(f"{{{WATERML_NS}}}time")
-        value_el = tvp.find(f"{{{WATERML_NS}}}value")
-        if time_el is None or value_el is None:
-            continue
-        try:
-            ts = datetime.fromisoformat(
-                (time_el.text or "").strip().replace("Z", "+00:00")
-            )
-            val = float(value_el.text or "")
-            quality = ""
-            qual_el = tvp.find(
-                f".//{{{WATERML_NS}}}TVPMeasurementMetadata"
-                f"/{{{WATERML_NS}}}qualifier"
-                f"/{{{SWE_NS}}}Category"
-                f"/{{{SWE_NS}}}value"
-            )
-            if qual_el is not None and qual_el.text:
-                quality = qual_el.text.strip()
-            results.append((ts, val, quality))
-        except (ValueError, TypeError):
-            continue
-    return results
+        return
 
 
 def _fetch_since(
@@ -179,11 +185,14 @@ def _fetch_since(
 
 
 def _filter_since(
-    observations: list[tuple[datetime, float, str]], since: datetime | None
-) -> list[tuple[datetime, float, str]]:
+    observations: Iterable[tuple[datetime, float, str]], since: datetime | None
+) -> Iterator[tuple[datetime, float, str]]:
     if since is None:
-        return observations
-    return [(ts, val, quality) for ts, val, quality in observations if ts >= since]
+        yield from observations
+        return
+    for ts, val, quality in observations:
+        if ts >= since:
+            yield (ts, val, quality)
 
 
 def _should_bulk_fetch(since: datetime | None) -> bool:
@@ -196,17 +205,16 @@ def _should_bulk_fetch(since: datetime | None) -> bool:
 
 def _fetch_gld_object_bulk(
     gld_bro_id: str, since: datetime | None, bucket: TokenBucket
-) -> list[tuple[datetime, float, str]]:
+) -> Iterator[tuple[datetime, float, str]]:
     url = GLD_BASE_URL.format(gld_bro_id=gld_bro_id)
     resp = _get(url, bucket, timeout=GLD_OBJECT_TIMEOUT)
-    return _filter_since(_parse_tvp_xml(resp.content), since)
+    yield from _filter_since(_parse_tvp_xml(resp.content), since)
 
 
 def _fetch_gld_per_observation(
     gld_bro_id: str, since: datetime | None, bucket: TokenBucket
-) -> list[tuple[datetime, float, str]]:
+) -> Iterator[tuple[datetime, float, str]]:
     obs_list = _observations_since(gld_bro_id, since, bucket)
-    all_results: list[tuple[datetime, float, str]] = []
     for obs in obs_list:
         obs_id = obs.get("observationId")
         if not obs_id:
@@ -216,20 +224,20 @@ def _fetch_gld_per_observation(
             params["startTVPTime"] = since.strftime("%Y-%m-%d")
         url = OBSERVATION_URL.format(gld_bro_id=gld_bro_id, observation_id=obs_id)
         resp = _get(url, bucket, params=params)
-        all_results.extend(_parse_tvp_xml(resp.content))
-    return _filter_since(all_results, since)
+        yield from _filter_since(_parse_tvp_xml(resp.content), since)
 
 
 def _fetch_gld(
     gld_bro_id: str, since: datetime | None, bucket: TokenBucket
-) -> list[tuple[datetime, float, str]]:
+) -> Iterator[tuple[datetime, float, str]]:
     if _should_bulk_fetch(since):
-        return _fetch_gld_object_bulk(gld_bro_id, since, bucket)
-    return _fetch_gld_per_observation(gld_bro_id, since, bucket)
+        yield from _fetch_gld_object_bulk(gld_bro_id, since, bucket)
+    else:
+        yield from _fetch_gld_per_observation(gld_bro_id, since, bucket)
 
 
 def _aggregate_daily(
-    observations: list[tuple[datetime, float, str]],
+    observations: Iterable[tuple[datetime, float, str]],
 ) -> list[tuple[date, float]]:
     day_values: dict[date, list[float]] = defaultdict(list)
     for ts, val, quality in observations:
@@ -262,7 +270,7 @@ def _upsert_measurements(well: Well, daily_obs: list[tuple[date, float]]) -> Non
 @dataclass
 class FetchResult:
     well: Well
-    observations: list[tuple[datetime, float, str]]
+    count: int = 0
     error: str | None = None
 
 
@@ -308,10 +316,13 @@ def _fetch_well_measurements(
 ) -> FetchResult:
     try:
         since = _fetch_since(last_measured_at, retention_cutoff)
-        observations = _fetch_gld(well.gld_bro_id, since, bucket)
-        return FetchResult(well=well, observations=observations)
+        daily_obs = _aggregate_daily(_fetch_gld(well.gld_bro_id, since, bucket))
+        _upsert_measurements(well, daily_obs)
+        return FetchResult(well=well, count=len(daily_obs))
     except Exception as exc:
-        return FetchResult(well=well, observations=[], error=str(exc))
+        return FetchResult(well=well, error=str(exc))
+    finally:
+        close_old_connections()
 
 
 def _fetch_wells_parallel(
@@ -335,11 +346,6 @@ def _fetch_wells_parallel(
         ]
         for future in as_completed(futures):
             yield future.result()
-
-
-def _apply_fetch_result(result: FetchResult) -> None:
-    daily_obs = _aggregate_daily(result.observations)
-    _upsert_measurements(result.well, daily_obs)
 
 
 class Command(BaseCommand):
@@ -464,15 +470,8 @@ class Command(BaseCommand):
                 if result.error:
                     errors.append(f"{well.bro_id}: {result.error}")
                     logger.error("Error %s: %s", well.bro_id, result.error)
-                    log_progress()
-                    continue
-
-                try:
-                    _apply_fetch_result(result)
+                else:
                     processed += 1
-                except Exception as exc:
-                    errors.append(f"{well.bro_id}: db write: {exc}")
-                    logger.error("DB write error %s: %s", well.bro_id, exc)
                 log_progress()
 
         return processed
