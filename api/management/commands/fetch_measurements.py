@@ -407,7 +407,22 @@ class Command(BaseCommand):
                 models.Q(research_last_date__isnull=True)
                 | models.Q(research_last_date__gte=cutoff)
             )
-            .order_by("id")
+            .annotate(
+                _has_measurement=models.Exists(
+                    Measurement.objects.filter(well=models.OuterRef("pk"))
+                ),
+                _fetch_priority=models.Case(
+                    models.When(
+                        _has_measurement=False,
+                        research_last_date__isnull=False,
+                        research_last_date__gte=cutoff,
+                        then=models.Value(0),
+                    ),
+                    default=models.Value(1),
+                    output_field=models.IntegerField(),
+                ),
+            )
+            .order_by("_fetch_priority", "id")
         )
         write_dev_bbox_notice()
         if limit:
