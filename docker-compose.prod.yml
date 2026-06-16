@@ -22,6 +22,7 @@ services:
       - "127.0.0.1:8060:8000"
     volumes:
       - ./config/settings_local.py:/app/config/settings_local.py:ro
+      - ./log:/app/log
     depends_on:
       db:
         condition: service_healthy

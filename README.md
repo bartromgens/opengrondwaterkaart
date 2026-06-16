@@ -104,6 +104,15 @@ docker compose -f docker-compose.prod.yml exec api python manage.py fetch_measur
 
 ## Viewing production logs
 
+Application log files are written to `./log/` on the host (mounted into the container at `/app/log`):
+
+```bash
+tail -f log/management.log   # management commands
+tail -f log/django.log       # Django app / API
+```
+
+Container stdout (gunicorn and console logging):
+
 ```bash
 # Follow logs from all containers
 docker compose -f docker-compose.prod.yml logs -f
