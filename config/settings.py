@@ -2,6 +2,9 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+LOG_DIR = BASE_DIR / "log"
+LOG_DIR.mkdir(exist_ok=True)
+
 SECRET_KEY = "django-insecure-placeholder-override-in-settings-local"
 
 DEBUG = False
@@ -143,3 +146,62 @@ try:
     from .settings_local import *  # noqa: F401 F403
 except ImportError:
     pass
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": (
+                "%(asctime)s %(levelname)s "
+                "%(name)s:%(funcName)s:%(lineno)d %(message)s"
+            ),
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "django_file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "django.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+        },
+        "management_file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(LOG_DIR / "management.log"),
+            "maxBytes": 10 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["django_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["django_file"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "api": {
+            "handlers": ["django_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "api.management": {
+            "handlers": ["management_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.core.management": {
+            "handlers": ["management_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

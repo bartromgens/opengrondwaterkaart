@@ -44,6 +44,10 @@ config/settings_local.py
 # Collected static files
 staticfiles/
 
+# Application logs
+log/*
+!log/.gitkeep
+
 # Node / Angular
 client/node_modules/
 client/dist/
