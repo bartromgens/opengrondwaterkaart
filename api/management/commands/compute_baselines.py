@@ -146,6 +146,26 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         run = IngestRun.objects.create(kind="compute_baselines")
         errors: list[str] = []
+        processed = 0
+
+        try:
+            processed = self._compute_all_baselines(options, errors)
+            run.wells_processed = processed
+            run.status = (
+                IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
+            )
+            logger.info("Done. %d wells processed, %d errors.", processed, len(errors))
+        except Exception as exc:
+            errors.append(str(exc))
+            run.wells_processed = processed
+            run.status = IngestRunStatus.FAILED
+            logger.exception("compute_baselines failed: %s", exc)
+
+        run.finished_at = django_timezone.now()
+        run.errors_json = errors
+        run.save()
+
+    def _compute_all_baselines(self, options: dict[str, Any], errors: list[str]) -> int:
         min_years = getattr(settings, "SGI_MIN_YEARS", 8)
         period_type = options["period_type"]
         limit = options["limit"]
@@ -208,10 +228,4 @@ class Command(BaseCommand):
                 errors.append(f"{well.bro_id}: {exc}")
                 logger.error("Error %s: %s", well.bro_id, exc)
 
-        run.wells_processed = processed
-        run.finished_at = django_timezone.now()
-        run.errors_json = errors
-        run.status = IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
-        run.save()
-
-        logger.info("Done. %d wells processed, %d errors.", processed, len(errors))
+        return processed

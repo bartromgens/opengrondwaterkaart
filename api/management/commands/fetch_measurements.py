@@ -364,15 +364,37 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         run = IngestRun.objects.create(kind="fetch_measurements")
         errors: list[str] = []
+        processed = 0
+
+        try:
+            processed = self._fetch_all_measurements(options, errors)
+            run.wells_processed = processed
+            run.status = (
+                IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
+            )
+            logger.info("Done. Processed %d wells, %d errors.", processed, len(errors))
+        except Exception as exc:
+            errors.append(str(exc))
+            run.wells_processed = processed
+            run.status = IngestRunStatus.FAILED
+            logger.exception("fetch_measurements failed: %s", exc)
+
+        run.finished_at = django_timezone.now()
+        run.errors_json = errors
+        run.save()
+
+    def _fetch_all_measurements(
+        self, options: dict[str, Any], errors: list[str]
+    ) -> int:
         rate = getattr(settings, "BRO_RATE_LIMIT_RPS", 3)
         workers = getattr(settings, "BRO_PARALLEL_WORKERS", max(3, int(rate * 2)))
         bucket = TokenBucket(rate)
         retention_days = getattr(settings, "MEASUREMENT_RETENTION_DAYS", 365)
         now = django_timezone.now()
         retention_cutoff = now - timedelta(days=retention_days)
+        limit = options["limit"]
         processed = 0
         completed = 0
-        limit = options["limit"]
 
         inactive_days = getattr(settings, "INACTIVE_WELL_DAYS", 365)
         cutoff = (
@@ -430,14 +452,12 @@ class Command(BaseCommand):
                     log_progress()
                     continue
 
-                _apply_fetch_result(result)
-                processed += 1
+                try:
+                    _apply_fetch_result(result)
+                    processed += 1
+                except Exception as exc:
+                    errors.append(f"{well.bro_id}: db write: {exc}")
+                    logger.error("DB write error %s: %s", well.bro_id, exc)
                 log_progress()
 
-        run.wells_processed = processed
-        run.finished_at = django_timezone.now()
-        run.errors_json = errors
-        run.status = IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
-        run.save()
-
-        logger.info("Done. Processed %d wells, %d errors.", processed, len(errors))
+        return processed
