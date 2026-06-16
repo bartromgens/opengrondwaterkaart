@@ -160,6 +160,11 @@ LOGGING = {
         },
     },
     "handlers": {
+        "console": {
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
         "django_file": {
             "level": "INFO",
             "class": "logging.handlers.RotatingFileHandler",
@@ -179,27 +184,27 @@ LOGGING = {
     },
     "loggers": {
         "django": {
-            "handlers": ["django_file"],
+            "handlers": ["django_file", "console"],
             "level": "INFO",
             "propagate": False,
         },
         "django.request": {
-            "handlers": ["django_file"],
+            "handlers": ["django_file", "console"],
             "level": "WARNING",
             "propagate": False,
         },
         "api": {
-            "handlers": ["django_file"],
+            "handlers": ["django_file", "console"],
             "level": "INFO",
             "propagate": False,
         },
         "api.management": {
-            "handlers": ["management_file"],
+            "handlers": ["management_file", "console"],
             "level": "INFO",
             "propagate": False,
         },
         "django.core.management": {
-            "handlers": ["management_file"],
+            "handlers": ["management_file", "console"],
             "level": "INFO",
             "propagate": False,
         },
