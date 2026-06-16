@@ -414,9 +414,7 @@ class Command(BaseCommand):
                     elapsed = time.monotonic() - started_at
                     remaining = (total - completed) * elapsed / completed
                     eta = f", ETA {_format_duration(remaining)}"
-                logger.info(
-                    "  %d/%d (%d%%)%s", completed, total, last_logged_pct, eta
-                )
+                logger.info("  %d/%d (%d%%)%s", completed, total, last_logged_pct, eta)
 
         for chunk in _well_chunks(wells, CHUNK_SIZE):
             last_measured = {} if options["reset"] else _last_measured_for_wells(chunk)
@@ -442,6 +440,4 @@ class Command(BaseCommand):
         run.status = IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
         run.save()
 
-        logger.info(
-            "Done. Processed %d wells, %d errors.", processed, len(errors)
-        )
+        logger.info("Done. Processed %d wells, %d errors.", processed, len(errors))

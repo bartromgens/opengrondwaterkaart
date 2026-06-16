@@ -107,9 +107,7 @@ class Command(BaseCommand):
             with download_samenhang_gpkg() as gpkg_path:
                 logger.info("Building GLD link map...")
                 link_map = _build_link_map(gpkg_path)
-                logger.info(
-                    "  %d wells have a GLD link in kenset", len(link_map)
-                )
+                logger.info("  %d wells have a GLD link in kenset", len(link_map))
 
                 logger.info("Building tube screen positions...")
                 tube_extras = _build_tube_extras(gpkg_path)

@@ -214,6 +214,4 @@ class Command(BaseCommand):
         run.status = IngestRunStatus.SUCCESS if not errors else IngestRunStatus.FAILED
         run.save()
 
-        logger.info(
-            "Done. %d wells processed, %d errors.", processed, len(errors)
-        )
+        logger.info("Done. %d wells processed, %d errors.", processed, len(errors))
