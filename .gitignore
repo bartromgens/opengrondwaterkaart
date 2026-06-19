@@ -48,6 +48,9 @@ staticfiles/
 log/*
 !log/.gitkeep
 
+# Database backups
+backups/
+
 # Node / Angular
 client/node_modules/
 client/dist/
