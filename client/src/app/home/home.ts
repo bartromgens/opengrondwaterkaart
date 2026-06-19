@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSliderModule } from '@angular/material/slider';
@@ -99,6 +100,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   @ViewChild('mapContainer', { static: true }) mapContainer!: ElementRef<HTMLDivElement>;
 
   private wellsService = inject(WellsService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private dateChange$ = new Subject<void>();
 
   map: maplibregl.Map | null = null;
@@ -136,6 +139,17 @@ export class HomeComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.initMap();
     this.loadMeta();
+
+    this.route.queryParamMap.subscribe((params) => {
+      const broId = params.get('well');
+      if (broId) {
+        if (this.selectedWell()?.bro_id !== broId) {
+          this.openWell(broId);
+        }
+      } else if (this.selectedWell()) {
+        this.closePanelState();
+      }
+    });
 
     this.dateChange$.pipe(debounceTime(200)).subscribe(() => this.onDateChanged());
   }
@@ -210,6 +224,11 @@ export class HomeComponent implements OnInit, OnDestroy {
         map.on('mouseleave', 'wells-circle', () => {
           map.getCanvas().style.cursor = '';
         });
+
+        const well = this.selectedWell();
+        if (well) {
+          this.flyToWell(well);
+        }
       },
       error: () => this.loading.set(false),
     });
@@ -261,6 +280,16 @@ export class HomeComponent implements OnInit, OnDestroy {
     const props = features[0].properties;
     const broId = props['id'];
 
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { well: broId },
+      queryParamsHandling: 'merge',
+    });
+
+    this.popup?.remove();
+  }
+
+  private openWell(broId: string): void {
     this.selectedWell.set(null);
     this.series.set(null);
     this.seriesLoading.set(true);
@@ -270,10 +299,25 @@ export class HomeComponent implements OnInit, OnDestroy {
         this.selectedWell.set(detail);
         this.showChart.set(true);
         this.loadSeries(broId);
+        this.flyToWell(detail);
+      },
+      error: () => {
+        this.seriesLoading.set(false);
+        void this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { well: null },
+          queryParamsHandling: 'merge',
+        });
       },
     });
+  }
 
-    this.popup?.remove();
+  private flyToWell(well: WellDetail): void {
+    if (!this.map) return;
+    this.map.flyTo({
+      center: [well.location.lng, well.location.lat],
+      zoom: Math.max(this.map.getZoom(), 12),
+    });
   }
 
   private loadSeries(broId: string): void {
@@ -349,9 +393,18 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   closePanel(): void {
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { well: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private closePanelState(): void {
     this.selectedWell.set(null);
     this.series.set(null);
     this.showChart.set(false);
+    this.seriesLoading.set(false);
   }
 
   formatDate(iso: string | null): string {

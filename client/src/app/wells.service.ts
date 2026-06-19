@@ -87,7 +87,7 @@ export class WellsService {
 
   getWellDetail(broId: string, date: string): Observable<WellDetail> {
     const params = new HttpParams().set('date', date);
-    return this.http.get<WellDetail>(`/api/wells/${broId}/`, { params });
+    return this.http.get<WellDetail>(`/api/wells/${encodeURIComponent(broId)}/`, { params });
   }
 
   getWellSeries(broId: string, opts?: { full?: boolean; date?: string }): Observable<WellSeries> {
@@ -98,7 +98,7 @@ export class WellsService {
     if (opts?.date) {
       params = params.set('date', opts.date);
     }
-    return this.http.get<WellSeries>(`/api/wells/${broId}/series/`, { params });
+    return this.http.get<WellSeries>(`/api/wells/${encodeURIComponent(broId)}/series/`, { params });
   }
 
   getMeta(): Observable<MetaResponse> {
