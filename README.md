@@ -7,7 +7,7 @@ Interactive map showing groundwater levels across the Netherlands for any select
 ## Data sources
 
 - **Well locations & metadata** — [BRO Grondwatermonitoring in Samenhang](https://service.pdok.nl/tno/bro-grondwatermonitoring-in-samenhang-karakteristieken/atom/index.xml) GeoPackage via PDOK ATOM feed (TNO/BRO).
-- **Measurements** — BRO REST API (`publiek.broservices.nl/gm/gld/v1`) per well, fetched incrementally. Only quality-approved (`goedgekeurd`) readings are stored, averaged to daily values in metres relative to NAP.
+- **Measurements** — BRO REST API (`publiek.broservices.nl/gm/gld/v1`) per well, fetched incrementally. All readings except quality-rejected (`afgekeurd`) are stored, averaged to daily values in metres relative to NAP.
 - **Baselines** — Computed locally from stored measurements: per-well weekly (ISO week) or monthly percentiles (p5–p95) over a configurable minimum number of years.
 
 ## Alternative websites

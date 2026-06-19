@@ -241,7 +241,7 @@ def _aggregate_daily(
 ) -> list[tuple[date, float]]:
     day_values: dict[date, list[float]] = defaultdict(list)
     for ts, val, quality in observations:
-        if quality != "goedgekeurd":
+        if quality == "afgekeurd":
             continue
         day_values[ts.date()].append(val)
     return sorted([(d, sum(vals) / len(vals)) for d, vals in day_values.items()])
