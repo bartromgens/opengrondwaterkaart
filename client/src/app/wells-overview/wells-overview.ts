@@ -18,6 +18,7 @@ import {
   WellsService,
   WellsStats,
 } from '../wells.service';
+import { SeoService } from '../seo.service';
 
 const FREQUENCY_LABELS: Record<MeasurementFrequency, string> = {
   daily: 'Dagelijks',
@@ -119,6 +120,7 @@ export class WellsOverviewComponent implements OnInit {
   @ViewChild(MatPaginator) paginator!: MatPaginator;
 
   private wellsService = inject(WellsService);
+  private seo = inject(SeoService);
 
   readonly displayedColumns = [
     'name',
@@ -164,6 +166,12 @@ export class WellsOverviewComponent implements OnInit {
   private ordering = '-last_measured_on';
 
   ngOnInit(): void {
+    this.seo.updateMetadata({
+      title: 'Putten overzicht — OpenGrondWaterKaart',
+      description:
+        'Overzicht van alle grondwatermeetputten in Nederland, met meetfrequentie, laatste meting en andere statistieken per put.',
+      path: '/wells',
+    });
     this.load(0, this.pageSize(), this.ordering);
     this.loadStats();
   }

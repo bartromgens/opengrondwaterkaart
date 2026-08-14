@@ -21,6 +21,7 @@ import * as maplibregl from 'maplibre-gl';
 import { WellDetail, WellSeries, WellsService } from '../wells.service';
 import { WellChartComponent } from '../well-chart-dialog/well-chart-dialog';
 import { TrackingService } from '../tracking.service';
+import { SeoService } from '../seo.service';
 
 const CLASSIFICATION_COLORS: Record<string, string> = {
   very_low: '#d73027',
@@ -163,6 +164,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private tracking = inject(TrackingService);
+  private seo = inject(SeoService);
   private dateChange$ = new Subject<void>();
   private programmaticMove = false;
 
@@ -231,6 +233,12 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.seo.updateMetadata({
+      title: 'OpenGrondWaterKaart — Actuele grondwaterstanden in Nederland',
+      description:
+        'Interactieve kaart met actuele grondwaterstanden in Nederland, gebaseerd op open data van BRO en PDOK. Bekijk grondwaterpeilen per put en per dag.',
+      path: '/',
+    });
     this.initMap();
     this.loadMeta();
 

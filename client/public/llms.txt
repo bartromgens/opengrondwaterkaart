@@ -1,0 +1,21 @@
+# OpenGrondWaterKaart
+
+> Interactive map showing groundwater levels across the Netherlands for any selected day, built on open data.
+
+OpenGrondWaterKaart visualizes groundwater levels (grondwaterstanden) at monitoring wells throughout the Netherlands. Wells are classified daily into five levels (very low, low, normal, high, very high) based on seasonal percentile baselines, so conditions are always comparable across the country for the same day.
+
+## Data sources
+
+- Well locations & metadata: BRO Grondwatermonitoring in Samenhang (TNO/BRO), via the PDOK ATOM feed.
+- Measurements: BRO REST API (publiek.broservices.nl/gm/gld/v1), fetched per well and averaged to daily values relative to NAP.
+- Baselines: locally computed per-well seasonal percentiles (p5-p95) over a configurable minimum number of years.
+
+## Pages
+
+- [Map](https://opengrondwaterkaart.nl/): interactive map of groundwater levels for a selected day.
+- [Wells overview](https://opengrondwaterkaart.nl/wells): tabular overview of all monitoring wells with measurement statistics.
+- [About](https://opengrondwaterkaart.nl/about): background on the project, goals, and data sources.
+
+## Project
+
+Open source (MIT license). Source code: https://github.com/bartromgens/opengrondwaterkaart
