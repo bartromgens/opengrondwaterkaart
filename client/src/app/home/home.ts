@@ -20,6 +20,7 @@ import * as maplibregl from 'maplibre-gl';
 
 import { WellDetail, WellSeries, WellsService } from '../wells.service';
 import { WellChartComponent } from '../well-chart-dialog/well-chart-dialog';
+import { TrackingService } from '../tracking.service';
 
 const CLASSIFICATION_COLORS: Record<string, string> = {
   very_low: '#d73027',
@@ -161,7 +162,9 @@ export class HomeComponent implements OnInit, OnDestroy {
   private wellsService = inject(WellsService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private tracking = inject(TrackingService);
   private dateChange$ = new Subject<void>();
+  private programmaticMove = false;
 
   map: maplibregl.Map | null = null;
   popup: maplibregl.Popup | null = null;
@@ -261,6 +264,17 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     this.map.on('load', () => this.loadWells());
+    this.map.on('zoomend', () => {
+      if (this.programmaticMove || !this.map) return;
+      this.tracking.trackEvent(
+        'Map Interaction',
+        'Zoom',
+        `Level ${Math.round(this.map.getZoom())}`,
+      );
+    });
+    this.map.on('dragend', () => {
+      this.tracking.trackEvent('Map Interaction', 'Drag');
+    });
   }
 
   private loadWells(): void {
@@ -371,6 +385,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     const props = features[0].properties;
     const broId = props['id'];
 
+    this.tracking.trackEvent('Map Interaction', 'Well Click', broId);
+
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { well: broId },
@@ -405,6 +421,10 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   private flyToWell(well: WellDetail): void {
     if (!this.map) return;
+    this.programmaticMove = true;
+    this.map.once('moveend', () => {
+      this.programmaticMove = false;
+    });
     this.map.flyTo({
       center: [well.location.lng, well.location.lat],
       zoom: Math.max(this.map.getZoom(), 12),
