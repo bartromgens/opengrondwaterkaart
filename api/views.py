@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from django.contrib.gis.geos import Polygon
+from django.db.models import Count, F, Max, Min
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.request import Request
@@ -14,6 +15,14 @@ from .models import (
     PeriodType,
     Well,
     WellBaseline,
+)
+
+FREQUENCY_THRESHOLDS_DAYS = (
+    (1.5, "daily"),
+    (9, "weekly"),
+    (45, "monthly"),
+    (120, "quarterly"),
+    (450, "yearly"),
 )
 
 
@@ -271,6 +280,125 @@ def well_series(request: Request, bro_id: str) -> Response:
                 else None
             ),
             "weekly_baselines": weekly_baselines,
+        }
+    )
+
+
+def _measurement_frequency(
+    first_on: date | None, last_on: date | None, count: int
+) -> str | None:
+    if not first_on or not last_on or count < 2:
+        return None
+    span_days = (last_on - first_on).days
+    if span_days <= 0:
+        return None
+    avg_gap_days = span_days / (count - 1)
+    for max_gap, label in FREQUENCY_THRESHOLDS_DAYS:
+        if avg_gap_days <= max_gap:
+            return label
+    return "irregular"
+
+
+OVERVIEW_ORDER_FIELDS = {
+    "name",
+    "bro_id",
+    "nitg_code",
+    "first_measured_on",
+    "last_measured_on",
+    "measurement_count",
+}
+OVERVIEW_DEFAULT_ORDERING = "-last_measured_on"
+OVERVIEW_DEFAULT_PAGE_SIZE = 50
+OVERVIEW_MAX_PAGE_SIZE = 200
+
+
+def _overview_ordering(request: Request) -> tuple[str, str]:
+    """Return (ordering, resolved db expression) for the wells overview query.
+
+    Falls back to the default ordering for unknown/missing fields. Wells
+    without any measurements are always sorted after wells with data,
+    regardless of sort direction.
+    """
+    raw = request.query_params.get("ordering", OVERVIEW_DEFAULT_ORDERING)
+    field = raw.lstrip("-")
+    if field not in OVERVIEW_ORDER_FIELDS:
+        raw, field = OVERVIEW_DEFAULT_ORDERING, OVERVIEW_DEFAULT_ORDERING.lstrip("-")
+    descending = raw.startswith("-")
+
+    if field in ("first_measured_on", "last_measured_on"):
+        expr = (
+            F(field).desc(nulls_last=True)
+            if descending
+            else F(field).asc(nulls_last=True)
+        )
+    else:
+        expr = f"-{field}" if descending else field
+    return raw, expr
+
+
+@api_view(["GET"])
+def wells_overview(request: Request) -> Response:
+    ordering, order_expr = _overview_ordering(request)
+
+    try:
+        page = max(int(request.query_params.get("page", 1)), 1)
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = int(
+            request.query_params.get("page_size", OVERVIEW_DEFAULT_PAGE_SIZE)
+        )
+    except (TypeError, ValueError):
+        page_size = OVERVIEW_DEFAULT_PAGE_SIZE
+    page_size = min(max(page_size, 1), OVERVIEW_MAX_PAGE_SIZE)
+
+    qs = Well.objects.annotate(
+        first_measured_on=Min("measurements__measured_on"),
+        last_measured_on=Max("measurements__measured_on"),
+        measurement_count=Count("measurements"),
+    ).order_by(order_expr, "bro_id")
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    rows = qs[start : start + page_size].values(
+        "bro_id",
+        "nitg_code",
+        "name",
+        "first_measured_on",
+        "last_measured_on",
+        "measurement_count",
+    )
+
+    results = [
+        {
+            "bro_id": row["bro_id"],
+            "nitg_code": row["nitg_code"],
+            "name": row["name"],
+            "first_measured_on": (
+                row["first_measured_on"].isoformat()
+                if row["first_measured_on"]
+                else None
+            ),
+            "last_measured_on": (
+                row["last_measured_on"].isoformat() if row["last_measured_on"] else None
+            ),
+            "measurement_count": row["measurement_count"],
+            "frequency": _measurement_frequency(
+                row["first_measured_on"],
+                row["last_measured_on"],
+                row["measurement_count"],
+            ),
+        }
+        for row in rows
+    ]
+
+    return Response(
+        {
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "ordering": ordering,
+            "results": results,
         }
     )
 

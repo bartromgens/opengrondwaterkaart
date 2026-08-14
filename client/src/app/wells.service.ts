@@ -73,6 +73,32 @@ export interface MetaResponse {
   total_wells: number;
 }
 
+export type MeasurementFrequency =
+  | 'daily'
+  | 'weekly'
+  | 'monthly'
+  | 'quarterly'
+  | 'yearly'
+  | 'irregular';
+
+export interface WellOverviewRow {
+  bro_id: string;
+  nitg_code: string;
+  name: string;
+  first_measured_on: string | null;
+  last_measured_on: string | null;
+  measurement_count: number;
+  frequency: MeasurementFrequency | null;
+}
+
+export interface WellOverviewResponse {
+  count: number;
+  page: number;
+  page_size: number;
+  ordering: string;
+  results: WellOverviewRow[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class WellsService {
   private http = inject(HttpClient);
@@ -103,5 +129,17 @@ export class WellsService {
 
   getMeta(): Observable<MetaResponse> {
     return this.http.get<MetaResponse>('/api/meta/');
+  }
+
+  getWellsOverview(opts: {
+    page: number;
+    pageSize: number;
+    ordering: string;
+  }): Observable<WellOverviewResponse> {
+    const params = new HttpParams()
+      .set('page', opts.page)
+      .set('page_size', opts.pageSize)
+      .set('ordering', opts.ordering);
+    return this.http.get<WellOverviewResponse>('/api/wells/overview/', { params });
   }
 }

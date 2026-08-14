@@ -1,0 +1,80 @@
+<div class="wells-overview-wrapper">
+  <nav class="wells-overview-nav">
+    <a mat-button routerLink="/" class="back-to-map">
+      <mat-icon>arrow_back</mat-icon>
+      Terug naar kaart
+    </a>
+  </nav>
+
+  <div class="wells-overview-container">
+    <h1>Overzicht putten</h1>
+    <p class="intro">
+      Alle geregistreerde putten met de eerste en laatste meting, het aantal metingen en de
+      gemiddelde meetfrequentie.
+    </p>
+
+    <div class="table-wrapper">
+      @if (loading()) {
+        <div class="loading-overlay">
+          <mat-spinner diameter="36"></mat-spinner>
+        </div>
+      }
+
+      <table
+        mat-table
+        [dataSource]="rows()"
+        matSort
+        matSortActive="last_measured_on"
+        matSortDirection="desc"
+        (matSortChange)="onSortChange($event)"
+        class="wells-table"
+      >
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Put</th>
+          <td mat-cell *matCellDef="let row">
+            <a [routerLink]="['/']" [queryParams]="{ well: row.bro_id }">{{
+              row.name || row.bro_id
+            }}</a>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="nitg_code">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>NITG-code</th>
+          <td mat-cell *matCellDef="let row">{{ row.nitg_code || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="first_measured_on">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [start]="'desc'">Eerste meting</th>
+          <td mat-cell *matCellDef="let row">{{ formatDate(row.first_measured_on) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="last_measured_on">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [start]="'desc'">Laatste meting</th>
+          <td mat-cell *matCellDef="let row">{{ formatDate(row.last_measured_on) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="frequency">
+          <th mat-header-cell *matHeaderCellDef>Meetfrequentie</th>
+          <td mat-cell *matCellDef="let row">{{ formatFrequency(row.frequency) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="measurement_count">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [start]="'desc'">
+            Aantal metingen
+          </th>
+          <td mat-cell *matCellDef="let row">{{ row.measurement_count }}</td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+      </table>
+    </div>
+
+    <mat-paginator
+      [length]="total()"
+      [pageSize]="pageSize()"
+      [pageSizeOptions]="[25, 50, 100]"
+      (page)="onPageChange($event)"
+    ></mat-paginator>
+  </div>
+</div>
