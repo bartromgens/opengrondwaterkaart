@@ -9,6 +9,10 @@ from django.utils import timezone
 from .frequency import measurement_frequency, refresh_well_frequencies
 from .measurement_summary import refresh_well_measurement_stats
 from .management.commands.bootstrap_wells import LAYER_GLD, LAYER_GMW, LAYER_TUBE
+from .management.commands.fetch_measurements import (
+    RECENT_MEASUREMENT_DAYS,
+    _wells_queryset,
+)
 from .management.commands.sync_bro_organizations import (
     Command as SyncOrganizationsCommand,
 )
@@ -94,6 +98,57 @@ class StoredMeasurementStatsTests(TestCase):
         self.assertIsNone(well.first_measured_on)
         self.assertIsNone(well.last_measured_on)
         self.assertEqual(well.measurement_count, 0)
+
+
+class FetchMeasurementsRecentFilterTests(TestCase):
+    def _create_well(
+        self,
+        bro_id: str,
+        *,
+        last_measured_on: date | None,
+        research_last_date: date | None = None,
+    ) -> Well:
+        if research_last_date is None:
+            research_last_date = timezone.now().date()
+        return Well.objects.create(
+            bro_id=bro_id,
+            gld_bro_id=f"GLD{bro_id}",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=research_last_date,
+            last_measured_on=last_measured_on,
+        )
+
+    @override_settings(DEV_WELL_BBOX=None)
+    def test_recent_flag_keeps_only_wells_measured_in_last_3_months(self):
+        today = timezone.now().date()
+        recent = self._create_well(
+            "BRO001", last_measured_on=today - timedelta(days=10)
+        )
+        self._create_well(
+            "BRO002",
+            last_measured_on=today - timedelta(days=RECENT_MEASUREMENT_DAYS + 1),
+        )
+        self._create_well("BRO003", last_measured_on=None)
+
+        bro_ids = list(_wells_queryset(recent=True).values_list("bro_id", flat=True))
+
+        self.assertEqual(bro_ids, [recent.bro_id])
+
+    @override_settings(DEV_WELL_BBOX=None)
+    def test_default_queryset_includes_wells_without_recent_measurements(self):
+        today = timezone.now().date()
+        recent = self._create_well(
+            "BRO001", last_measured_on=today - timedelta(days=10)
+        )
+        older = self._create_well(
+            "BRO002",
+            last_measured_on=today - timedelta(days=RECENT_MEASUREMENT_DAYS + 1),
+        )
+        never = self._create_well("BRO003", last_measured_on=None)
+
+        bro_ids = set(_wells_queryset().values_list("bro_id", flat=True))
+
+        self.assertEqual(bro_ids, {recent.bro_id, older.bro_id, never.bro_id})
 
 
 class WellsOverviewViewTests(TestCase):

@@ -31,6 +31,7 @@ XLINK_NS = "http://www.w3.org/1999/xlink"
 
 CHUNK_SIZE = 200
 GLD_OBJECT_TIMEOUT = 120
+RECENT_MEASUREMENT_DAYS = 90
 logger = logging.getLogger(__name__)
 
 
@@ -276,6 +277,37 @@ class FetchResult:
     error: str | None = None
 
 
+def _wells_queryset(*, recent: bool = False) -> Any:
+    inactive_days = getattr(settings, "INACTIVE_WELL_DAYS", 365)
+    cutoff = (django_timezone.now() - timedelta(days=inactive_days)).date()
+    qs = Well.objects.filter(gld_bro_id__gt="").filter(
+        models.Q(research_last_date__isnull=True)
+        | models.Q(research_last_date__gte=cutoff)
+    )
+    if recent:
+        recent_cutoff = (
+            django_timezone.now() - timedelta(days=RECENT_MEASUREMENT_DAYS)
+        ).date()
+        qs = qs.filter(last_measured_on__gte=recent_cutoff)
+    return filter_wells_by_dev_bbox(
+        qs.annotate(
+            _has_measurement=models.Exists(
+                Measurement.objects.filter(well=models.OuterRef("pk"))
+            ),
+            _fetch_priority=models.Case(
+                models.When(
+                    _has_measurement=False,
+                    research_last_date__isnull=False,
+                    research_last_date__gte=cutoff,
+                    then=models.Value(0),
+                ),
+                default=models.Value(1),
+                output_field=models.IntegerField(),
+            ),
+        ).order_by("_fetch_priority", "id")
+    )
+
+
 def _well_chunks(qs: Any, chunk_size: int) -> Iterator[list[Well]]:
     chunk: list[Well] = []
     for well in qs.iterator(chunk_size=chunk_size):
@@ -368,6 +400,14 @@ class Command(BaseCommand):
                 "ignoring the latest stored measurement date."
             ),
         )
+        parser.add_argument(
+            "--recent",
+            action="store_true",
+            help=(
+                "Only process wells that have a stored measurement "
+                f"in the last {RECENT_MEASUREMENT_DAYS} days."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         run = IngestRun.objects.create(kind="fetch_measurements")
@@ -408,42 +448,17 @@ class Command(BaseCommand):
         processed = 0
         completed = 0
 
-        inactive_days = getattr(settings, "INACTIVE_WELL_DAYS", 365)
-        cutoff = (
-            django_timezone.now() - django_timezone.timedelta(days=inactive_days)
-        ).date()
-
-        wells = filter_wells_by_dev_bbox(
-            Well.objects.filter(gld_bro_id__gt="")
-            .filter(
-                models.Q(research_last_date__isnull=True)
-                | models.Q(research_last_date__gte=cutoff)
-            )
-            .annotate(
-                _has_measurement=models.Exists(
-                    Measurement.objects.filter(well=models.OuterRef("pk"))
-                ),
-                _fetch_priority=models.Case(
-                    models.When(
-                        _has_measurement=False,
-                        research_last_date__isnull=False,
-                        research_last_date__gte=cutoff,
-                        then=models.Value(0),
-                    ),
-                    default=models.Value(1),
-                    output_field=models.IntegerField(),
-                ),
-            )
-            .order_by("_fetch_priority", "id")
-        )
+        wells = _wells_queryset(recent=options["recent"])
         write_dev_bbox_notice()
         if limit:
             wells = wells[:limit]
 
         total = wells.count()
+        scope = "recently measured" if options["recent"] else "active"
         logger.info(
-            "Fetching measurements for %d active wells (%d workers @ %s req/s)...",
+            "Fetching measurements for %d %s wells (%d workers @ %s req/s)...",
             total,
+            scope,
             workers,
             rate,
         )
