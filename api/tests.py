@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .frequency import measurement_frequency, refresh_well_frequencies
+from .measurement_summary import refresh_well_measurement_stats
 from .management.commands.bootstrap_wells import LAYER_GLD, LAYER_GMW, LAYER_TUBE
 from .management.commands.sync_bro_organizations import (
     Command as SyncOrganizationsCommand,
@@ -69,6 +70,32 @@ class StoredMeasurementFrequencyTests(TestCase):
         self.assertIsNone(well.measurement_frequency)
 
 
+class StoredMeasurementStatsTests(TestCase):
+    def test_refresh_stores_and_clears_measurement_stats(self):
+        well = Well.objects.create(
+            bro_id="BRO001", location=Point(5.0, 52.0, srid=4326)
+        )
+        Measurement.objects.create(
+            well=well, measured_on=date(2020, 1, 1), value_m_nap=1.0
+        )
+        Measurement.objects.create(
+            well=well, measured_on=date(2020, 1, 15), value_m_nap=1.2
+        )
+
+        self.assertEqual(refresh_well_measurement_stats(), 1)
+        well.refresh_from_db()
+        self.assertEqual(well.first_measured_on, date(2020, 1, 1))
+        self.assertEqual(well.last_measured_on, date(2020, 1, 15))
+        self.assertEqual(well.measurement_count, 2)
+
+        Measurement.objects.all().delete()
+        self.assertEqual(refresh_well_measurement_stats(), 0)
+        well.refresh_from_db()
+        self.assertIsNone(well.first_measured_on)
+        self.assertIsNone(well.last_measured_on)
+        self.assertEqual(well.measurement_count, 0)
+
+
 class WellsOverviewViewTests(TestCase):
     def setUp(self):
         self.well_with_data = Well.objects.create(
@@ -109,6 +136,7 @@ class WellsOverviewViewTests(TestCase):
         Measurement.objects.create(
             well=self.well_with_data, measured_on=date(2020, 1, 15), value_m_nap=1.2
         )
+        refresh_well_measurement_stats()
         refresh_well_frequencies()
 
     def test_returns_stats_for_well_with_measurements(self):
@@ -420,6 +448,7 @@ class WellsStatsViewTests(TestCase):
         Measurement.objects.create(
             well=self.well_yearly, measured_on=date(2020, 1, 1), value_m_nap=2.1
         )
+        refresh_well_measurement_stats()
         refresh_well_frequencies()
 
     def test_returns_totals_and_distribution(self):
@@ -456,6 +485,7 @@ class WellsStatsViewTests(TestCase):
 
     def test_handles_no_measurements_at_all(self):
         Measurement.objects.all().delete()
+        refresh_well_measurement_stats()
         refresh_well_frequencies()
         response = self.client.get(reverse("wells-stats"))
         body = response.json()

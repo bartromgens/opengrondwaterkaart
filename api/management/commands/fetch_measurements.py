@@ -17,6 +17,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone as django_timezone
 
 from api.frequency import refresh_well_frequencies
+from api.measurement_summary import refresh_well_measurement_stats
 from api.management.dev_bbox import filter_wells_by_dev_bbox, write_dev_bbox_notice
 from api.models import IngestRun, IngestRunStatus, Measurement, Well
 
@@ -375,7 +376,9 @@ class Command(BaseCommand):
 
         try:
             processed = self._fetch_all_measurements(options, errors)
+            stored_stats = refresh_well_measurement_stats()
             stored = refresh_well_frequencies()
+            logger.info("Stored measurement stats for %d wells.", stored_stats)
             logger.info("Stored measurement frequency for %d wells.", stored)
             run.wells_processed = processed
             run.status = (

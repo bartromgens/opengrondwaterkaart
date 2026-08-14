@@ -46,6 +46,9 @@ class Well(models.Model):
         blank=True,
         db_index=True,
     )
+    first_measured_on = models.DateField(null=True, blank=True)
+    last_measured_on = models.DateField(null=True, blank=True, db_index=True)
+    measurement_count = models.PositiveIntegerField(default=0)
     tube_number = models.PositiveSmallIntegerField(default=1)
     nitg_code = models.CharField(max_length=20, blank=True)
     name = models.CharField(max_length=120, blank=True)

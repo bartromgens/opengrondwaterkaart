@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from typing import Iterable
 
 from django.contrib.gis.geos import Polygon
-from django.db.models import Count, F, Max, Min, OuterRef, Prefetch, Subquery, Value
+from django.db.models import Count, F, OuterRef, Prefetch, Subquery, Value
 from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
 from rest_framework.decorators import api_view
@@ -421,9 +421,6 @@ def wells_overview(request: Request) -> Response:
     page_size = min(max(page_size, 1), OVERVIEW_MAX_PAGE_SIZE)
 
     qs = Well.objects.annotate(
-        first_measured_on=Min("measurements__measured_on"),
-        last_measured_on=Max("measurements__measured_on"),
-        measurement_count=Count("measurements"),
         owner_name=Subquery(
             Organization.objects.filter(kvk_number=OuterRef("owner_kvk")).values(
                 "name"
@@ -431,7 +428,7 @@ def wells_overview(request: Request) -> Response:
         ),
     ).order_by(order_expr, "bro_id")
 
-    total = qs.count()
+    total = Well.objects.count()
     start = (page - 1) * page_size
     rows = list(
         qs[start : start + page_size].values(
@@ -542,12 +539,12 @@ def wells_stats(request: Request) -> Response:
     total_wells = Well.objects.count()
     today = timezone.localdate()
 
-    measurement_stats = list(
-        Measurement.objects.values("well_id").annotate(
-            last_measured_on=Max("measured_on"),
+    last_dates = list(
+        Well.objects.filter(last_measured_on__isnull=False).values_list(
+            "last_measured_on", flat=True
         )
     )
-    wells_with_data = len(measurement_stats)
+    wells_with_data = len(last_dates)
     wells_without_data = total_wells - wells_with_data
     frequency_counts: Counter = Counter()
     none_count = 0
@@ -562,8 +559,7 @@ def wells_stats(request: Request) -> Response:
 
     age_counts: Counter = Counter()
     newest_measured_on: date | None = None
-    for row in measurement_stats:
-        last_on = row["last_measured_on"]
+    for last_on in last_dates:
         age_counts[_age_bucket_key((today - last_on).days)] += 1
         if newest_measured_on is None or last_on > newest_measured_on:
             newest_measured_on = last_on
