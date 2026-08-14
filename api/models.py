@@ -11,9 +11,24 @@ class Organization(models.Model):
         return f"{self.name} ({self.kvk_number})"
 
 
+class MonitoringNetwork(models.Model):
+    bro_id = models.CharField(max_length=40, unique=True, db_index=True)
+    name = models.CharField(max_length=200, blank=True)
+    monitoring_purpose = models.CharField(max_length=80, blank=True)
+    groundwater_aspect = models.CharField(max_length=40, blank=True)
+    delivery_context = models.CharField(max_length=80, blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    bro_object_url = models.URLField(blank=True)
+
+    def __str__(self) -> str:
+        return self.name or self.bro_id
+
+
 class Well(models.Model):
     bro_id = models.CharField(max_length=40, unique=True, db_index=True)
     gld_bro_id = models.CharField(max_length=40, blank=True, db_index=True)
+    research_first_date = models.DateField(null=True, blank=True)
     research_last_date = models.DateField(null=True, blank=True, db_index=True)
     tube_number = models.PositiveSmallIntegerField(default=1)
     nitg_code = models.CharField(max_length=20, blank=True)
@@ -26,6 +41,12 @@ class Well(models.Model):
     owner_kvk = models.CharField(max_length=8, blank=True, db_index=True)
     bronhouder_kvk = models.CharField(max_length=8, blank=True, db_index=True)
     bro_object_url = models.URLField(blank=True)
+    well_construction_date = models.DateField(null=True, blank=True)
+    initial_function = models.CharField(max_length=40, blank=True)
+    number_of_monitoring_tubes = models.PositiveSmallIntegerField(default=1)
+    monitoring_networks = models.ManyToManyField(
+        MonitoringNetwork, related_name="wells", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     pdok_updated_at = models.DateTimeField(null=True, blank=True)
 

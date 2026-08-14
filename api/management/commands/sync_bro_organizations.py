@@ -14,12 +14,20 @@ logger = logging.getLogger(__name__)
 BRO_ORGANIZATIONS_URL = (
     "https://basisregistratieondergrond.nl/service-contact/formulieren/aangemeld-bro/"
 )
+# The site redirects the default python-requests User-Agent into a redirect loop.
+USER_AGENT = (
+    "OpenGrondWaterKaart/1.0 (+https://github.com/bartromgens/opengrondwaterkaart)"
+)
 LIST_MARKER = "Organisatienaam | KVK-nummer"
 ENTRY_PATTERN = re.compile(r"([^|<]+)\|\s*(\d{8})")
 
 
 def _fetch_html() -> str:
-    resp = requests.get(BRO_ORGANIZATIONS_URL, timeout=30)
+    resp = requests.get(
+        BRO_ORGANIZATIONS_URL,
+        timeout=30,
+        headers={"User-Agent": USER_AGENT},
+    )
     resp.raise_for_status()
     return resp.text
 

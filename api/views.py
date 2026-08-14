@@ -1,8 +1,9 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, timedelta
+from typing import Iterable
 
 from django.contrib.gis.geos import Polygon
-from django.db.models import Count, F, Max, Min
+from django.db.models import Count, F, Max, Min, Prefetch
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.request import Request
@@ -13,6 +14,7 @@ from .models import (
     IngestRun,
     IngestRunStatus,
     Measurement,
+    MonitoringNetwork,
     Organization,
     PeriodType,
     Well,
@@ -165,7 +167,7 @@ def _organization_payload(
 @api_view(["GET"])
 def well_detail(request: Request, bro_id: str) -> Response:
     try:
-        well = Well.objects.get(bro_id=bro_id)
+        well = Well.objects.prefetch_related("monitoring_networks").get(bro_id=bro_id)
     except Well.DoesNotExist:
         return Response({"error": "Well not found."}, status=404)
 
@@ -206,6 +208,29 @@ def well_detail(request: Request, bro_id: str) -> Response:
         "tube_top_m": well.tube_top_m,
         "screen_top_m": well.screen_top_m,
         "screen_bottom_m": well.screen_bottom_m,
+        "well_construction_date": (
+            well.well_construction_date.isoformat()
+            if well.well_construction_date
+            else None
+        ),
+        "initial_function": well.initial_function or None,
+        "number_of_monitoring_tubes": well.number_of_monitoring_tubes,
+        "research_first_date": (
+            well.research_first_date.isoformat() if well.research_first_date else None
+        ),
+        "research_last_date": (
+            well.research_last_date.isoformat() if well.research_last_date else None
+        ),
+        "monitoring_networks": [
+            {
+                "bro_id": network.bro_id,
+                "name": network.name or network.bro_id,
+                "monitoring_purpose": network.monitoring_purpose or None,
+                "groundwater_aspect": network.groundwater_aspect or None,
+                "bro_object_url": network.bro_object_url or None,
+            }
+            for network in well.monitoring_networks.all().order_by("name", "bro_id")
+        ],
         "owner": _organization_payload(well.owner_kvk, organizations_by_kvk),
         "bronhouder": _organization_payload(well.bronhouder_kvk, organizations_by_kvk),
         "bro_object_url": well.bro_object_url or None,
@@ -310,25 +335,107 @@ def well_series(request: Request, bro_id: str) -> Response:
     )
 
 
-def _measurement_frequency(
-    first_on: date | None, last_on: date | None, count: int
-) -> str | None:
-    if not first_on or not last_on or count < 2:
+def _median(values: list[float]) -> float | None:
+    if not values:
         return None
-    span_days = (last_on - first_on).days
-    if span_days <= 0:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _frequency_from_median_gap(median_gap_days: float | None) -> str | None:
+    if median_gap_days is None:
         return None
-    avg_gap_days = span_days / (count - 1)
     for max_gap, label in FREQUENCY_THRESHOLDS_DAYS:
-        if avg_gap_days <= max_gap:
+        if median_gap_days <= max_gap:
             return label
     return "irregular"
+
+
+def _measurement_frequency(dates: list[date]) -> str | None:
+    if len(dates) < 2:
+        return None
+    ordered = sorted(dates)
+    gaps = [float((ordered[i] - ordered[i - 1]).days) for i in range(1, len(ordered))]
+    return _frequency_from_median_gap(_median(gaps))
+
+
+def _frequencies_by_well_id(well_ids: Iterable[int]) -> dict[int, str | None]:
+    ids = list(well_ids)
+    if not ids:
+        return {}
+    dates_by_well: dict[int, list[date]] = defaultdict(list)
+    for well_id, measured_on in (
+        Measurement.objects.filter(well_id__in=ids)
+        .order_by("well_id", "measured_on")
+        .values_list("well_id", "measured_on")
+        .iterator(chunk_size=10_000)
+    ):
+        dates_by_well[well_id].append(measured_on)
+    return {
+        well_id: _measurement_frequency(dates_by_well.get(well_id, []))
+        for well_id in ids
+    }
+
+
+def _monitoring_networks_by_well_id(
+    well_ids: Iterable[int],
+) -> dict[int, list[dict[str, str]]]:
+    ids = list(well_ids)
+    if not ids:
+        return {}
+    networks = Prefetch(
+        "monitoring_networks",
+        queryset=MonitoringNetwork.objects.order_by("name", "bro_id"),
+    )
+    result: dict[int, list[dict[str, str]]] = {well_id: [] for well_id in ids}
+    for well in Well.objects.filter(id__in=ids).prefetch_related(networks):
+        result[well.id] = [
+            {"bro_id": network.bro_id, "name": network.name or network.bro_id}
+            for network in well.monitoring_networks.all()
+        ]
+    return result
+
+
+def _all_frequencies_by_well_id() -> dict[int, str | None]:
+    """Median consecutive gap per well via Postgres window + percentile_cont."""
+    from django.db import connection
+
+    sql = """
+        WITH gaps AS (
+            SELECT
+                well_id,
+                measured_on - LAG(measured_on) OVER (
+                    PARTITION BY well_id ORDER BY measured_on
+                ) AS gap_days
+            FROM api_measurement
+        )
+        SELECT
+            well_id,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY gap_days) AS median_gap
+        FROM gaps
+        WHERE gap_days IS NOT NULL
+        GROUP BY well_id
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(sql)
+        return {
+            well_id: _frequency_from_median_gap(float(median_gap))
+            for well_id, median_gap in cursor.fetchall()
+        }
 
 
 OVERVIEW_ORDER_FIELDS = {
     "name",
     "bro_id",
     "nitg_code",
+    "well_construction_date",
+    "initial_function",
+    "number_of_monitoring_tubes",
+    "research_first_date",
+    "research_last_date",
     "first_measured_on",
     "last_measured_on",
     "measurement_count",
@@ -351,7 +458,13 @@ def _overview_ordering(request: Request) -> tuple[str, str]:
         raw, field = OVERVIEW_DEFAULT_ORDERING, OVERVIEW_DEFAULT_ORDERING.lstrip("-")
     descending = raw.startswith("-")
 
-    if field in ("first_measured_on", "last_measured_on"):
+    if field in (
+        "first_measured_on",
+        "last_measured_on",
+        "well_construction_date",
+        "research_first_date",
+        "research_last_date",
+    ):
         expr = (
             F(field).desc(nulls_last=True)
             if descending
@@ -386,20 +499,50 @@ def wells_overview(request: Request) -> Response:
 
     total = qs.count()
     start = (page - 1) * page_size
-    rows = qs[start : start + page_size].values(
-        "bro_id",
-        "nitg_code",
-        "name",
-        "first_measured_on",
-        "last_measured_on",
-        "measurement_count",
+    rows = list(
+        qs[start : start + page_size].values(
+            "id",
+            "bro_id",
+            "nitg_code",
+            "name",
+            "well_construction_date",
+            "initial_function",
+            "number_of_monitoring_tubes",
+            "research_first_date",
+            "research_last_date",
+            "first_measured_on",
+            "last_measured_on",
+            "measurement_count",
+        )
     )
+    frequencies = _frequencies_by_well_id(
+        row["id"] for row in rows if row["measurement_count"] >= 2
+    )
+    networks_by_well_id = _monitoring_networks_by_well_id(row["id"] for row in rows)
 
     results = [
         {
             "bro_id": row["bro_id"],
             "nitg_code": row["nitg_code"],
             "name": row["name"],
+            "well_construction_date": (
+                row["well_construction_date"].isoformat()
+                if row["well_construction_date"]
+                else None
+            ),
+            "initial_function": row["initial_function"] or None,
+            "number_of_monitoring_tubes": row["number_of_monitoring_tubes"],
+            "research_first_date": (
+                row["research_first_date"].isoformat()
+                if row["research_first_date"]
+                else None
+            ),
+            "research_last_date": (
+                row["research_last_date"].isoformat()
+                if row["research_last_date"]
+                else None
+            ),
+            "monitoring_networks": networks_by_well_id.get(row["id"], []),
             "first_measured_on": (
                 row["first_measured_on"].isoformat()
                 if row["first_measured_on"]
@@ -409,11 +552,7 @@ def wells_overview(request: Request) -> Response:
                 row["last_measured_on"].isoformat() if row["last_measured_on"] else None
             ),
             "measurement_count": row["measurement_count"],
-            "frequency": _measurement_frequency(
-                row["first_measured_on"],
-                row["last_measured_on"],
-                row["measurement_count"],
-            ),
+            "frequency": frequencies.get(row["id"]),
         }
         for row in rows
     ]
@@ -440,37 +579,56 @@ FREQUENCY_DISTRIBUTION_ORDER = [
     "no_data",
 ]
 
+# (key, Dutch label, inclusive max age in days; None = open-ended)
+AGE_BUCKETS: list[tuple[str, str, int | None]] = [
+    ("0_7", "0–7 dagen", 7),
+    ("8_30", "8–30 dagen", 30),
+    ("31_90", "1–3 maanden", 90),
+    ("91_180", "3–6 maanden", 180),
+    ("181_365", "6–12 maanden", 365),
+    ("366_730", "1–2 jaar", 730),
+    ("over_730", ">2 jaar", None),
+]
+
+
+def _age_bucket_key(age_days: int) -> str:
+    for key, _label, max_days in AGE_BUCKETS:
+        if max_days is None or age_days <= max_days:
+            return key
+    return AGE_BUCKETS[-1][0]
+
 
 @api_view(["GET"])
 def wells_stats(request: Request) -> Response:
     total_wells = Well.objects.count()
+    today = timezone.localdate()
 
     measurement_stats = list(
         Measurement.objects.values("well_id").annotate(
-            first_measured_on=Min("measured_on"),
             last_measured_on=Max("measured_on"),
             measurement_count=Count("id"),
         )
     )
     wells_with_data = len(measurement_stats)
+    frequencies = _all_frequencies_by_well_id()
 
     frequency_counts: Counter = Counter({"no_data": total_wells - wells_with_data})
+    age_counts: Counter = Counter()
     newest_measured_on: date | None = None
     for row in measurement_stats:
-        frequency = (
-            _measurement_frequency(
-                row["first_measured_on"],
-                row["last_measured_on"],
-                row["measurement_count"],
-            )
-            or "unknown"
-        )
-        frequency_counts[frequency] += 1
-        if newest_measured_on is None or row["last_measured_on"] > newest_measured_on:
-            newest_measured_on = row["last_measured_on"]
+        if row["measurement_count"] < 2:
+            frequency_counts["unknown"] += 1
+        else:
+            frequency = frequencies.get(row["well_id"]) or "unknown"
+            frequency_counts[frequency] += 1
+
+        last_on = row["last_measured_on"]
+        age_counts[_age_bucket_key((today - last_on).days)] += 1
+        if newest_measured_on is None or last_on > newest_measured_on:
+            newest_measured_on = last_on
 
     newest_measurement_age_days = (
-        (timezone.localdate() - newest_measured_on).days if newest_measured_on else None
+        (today - newest_measured_on).days if newest_measured_on else None
     )
 
     return Response(
@@ -486,6 +644,14 @@ def wells_stats(request: Request) -> Response:
                 label: frequency_counts.get(label, 0)
                 for label in FREQUENCY_DISTRIBUTION_ORDER
             },
+            "latest_measurement_age_distribution": [
+                {
+                    "key": key,
+                    "label": label,
+                    "count": age_counts.get(key, 0),
+                }
+                for key, label, _max in AGE_BUCKETS
+            ],
         }
     )
 

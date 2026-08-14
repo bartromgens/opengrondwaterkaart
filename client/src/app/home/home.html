@@ -95,18 +95,22 @@
       }
 
       <div class="panel-stats">
-        <div class="stat">
-          <span class="stat-label">Stand</span>
-          <span class="stat-value">{{ formatValue(selectedWell()!.status.value_m_nap) }}</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Percentiel</span>
-          <span class="stat-value">{{ formatPercentile(selectedWell()!.status.percentile) }}</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Gemeten op</span>
-          <span class="stat-value">{{ formatDate(selectedWell()!.status.measured_on) }}</span>
-        </div>
+        @if (selectedWell()!.status.value_m_nap !== null) {
+          <div class="stat">
+            <span class="stat-label">Stand</span>
+            <span class="stat-value">{{ formatValue(selectedWell()!.status.value_m_nap) }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Percentiel</span>
+            <span class="stat-value">{{
+              formatPercentile(selectedWell()!.status.percentile)
+            }}</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Gemeten op</span>
+            <span class="stat-value">{{ formatDate(selectedWell()!.status.measured_on) }}</span>
+          </div>
+        }
         @if (selectedWell()!.ground_level_m !== null) {
           <div class="stat">
             <span class="stat-label">Maaiveld</span>
@@ -115,7 +119,45 @@
         }
       </div>
 
-      @if (selectedWell()!.owner || selectedWell()!.bronhouder) {
+      @if (wellSpecs().length > 0) {
+        <div class="panel-section-label">Putgegevens</div>
+        <div class="panel-stats">
+          @for (spec of wellSpecs(); track spec.label) {
+            <div class="stat">
+              <span class="stat-label">{{ spec.label }}</span>
+              <span class="stat-value">{{ spec.value }}</span>
+            </div>
+          }
+        </div>
+      }
+
+      @if (selectedWell()!.monitoring_networks.length > 0) {
+        <div class="panel-section-label">Meetnetten</div>
+        <ul class="network-list">
+          @for (network of selectedWell()!.monitoring_networks; track network.bro_id) {
+            <li class="network-item">
+              @if (network.bro_object_url) {
+                <a
+                  class="network-name"
+                  [href]="network.bro_object_url"
+                  target="_blank"
+                  rel="noopener"
+                  >{{ network.name }}</a
+                >
+              } @else {
+                <span class="network-name">{{ network.name }}</span>
+              }
+              @if (network.groundwater_aspect) {
+                <span class="network-meta">{{
+                  formatGroundwaterAspect(network.groundwater_aspect)
+                }}</span>
+              }
+            </li>
+          }
+        </ul>
+      }
+
+      @if (selectedWell()!.owner || selectedWell()!.bronhouder || selectedWell()!.bro_object_url) {
         <div class="panel-section-label">Beheer</div>
         <div class="panel-management">
           @if (selectedWell()!.bronhouder) {

@@ -7,8 +7,11 @@ import { MatPaginator, MatPaginatorModule, PageEvent } from '@angular/material/p
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSortModule, Sort } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
+import { NgxEchartsDirective } from 'ngx-echarts';
+import type { EChartsCoreOption } from 'echarts/core';
 
 import {
+  AgeDistributionBucket,
   FrequencyDistribution,
   MeasurementFrequency,
   WellOverviewRow,
@@ -23,6 +26,13 @@ const FREQUENCY_LABELS: Record<MeasurementFrequency, string> = {
   quarterly: 'Per kwartaal',
   yearly: 'Jaarlijks',
   irregular: 'Onregelmatig',
+};
+
+const INITIAL_FUNCTION_LABELS: Record<string, string> = {
+  stand: 'Waterstand',
+  kwaliteit: 'Kwaliteit',
+  combinatie: 'Combinatie',
+  onbekend: 'Onbekend',
 };
 
 const DISTRIBUTION_LABELS: Record<keyof FrequencyDistribution, string> = {
@@ -49,6 +59,46 @@ export interface DistributionBar {
   percent: number;
 }
 
+function buildAgeChartOption(buckets: AgeDistributionBucket[]): EChartsCoreOption {
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+    },
+    grid: {
+      left: 48,
+      right: 16,
+      top: 16,
+      bottom: 56,
+    },
+    xAxis: {
+      type: 'category',
+      data: buckets.map((b) => b.label),
+      axisLabel: {
+        interval: 0,
+        rotate: 30,
+        color: '#555',
+        fontSize: 11,
+      },
+      axisTick: { alignWithLabel: true },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLabel: { color: '#555' },
+      splitLine: { lineStyle: { color: '#eef2f7' } },
+    },
+    series: [
+      {
+        type: 'bar',
+        data: buckets.map((b) => b.count),
+        itemStyle: { color: '#2196f3', borderRadius: [4, 4, 0, 0] },
+        barMaxWidth: 48,
+      },
+    ],
+  };
+}
+
 @Component({
   selector: 'app-wells-overview',
   imports: [
@@ -60,6 +110,7 @@ export interface DistributionBar {
     MatProgressSpinnerModule,
     MatSortModule,
     MatTableModule,
+    NgxEchartsDirective,
   ],
   templateUrl: './wells-overview.html',
   styleUrl: './wells-overview.scss',
@@ -72,6 +123,11 @@ export class WellsOverviewComponent implements OnInit {
   readonly displayedColumns = [
     'name',
     'nitg_code',
+    'well_construction_date',
+    'initial_function',
+    'number_of_monitoring_tubes',
+    'research_first_date',
+    'monitoring_networks',
     'first_measured_on',
     'last_measured_on',
     'frequency',
@@ -96,6 +152,12 @@ export class WellsOverviewComponent implements OnInit {
       count: distribution[key],
       percent: (distribution[key] / max) * 100,
     }));
+  });
+
+  ageChartOption = computed<EChartsCoreOption | null>(() => {
+    const buckets = this.stats()?.latest_measurement_age_distribution;
+    if (!buckets?.length) return null;
+    return buildAgeChartOption(buckets);
   });
 
   private ordering = '-last_measured_on';
@@ -129,6 +191,16 @@ export class WellsOverviewComponent implements OnInit {
 
   formatFrequency(frequency: MeasurementFrequency | null): string {
     return frequency ? FREQUENCY_LABELS[frequency] : '—';
+  }
+
+  formatInitialFunction(code: string | null): string {
+    if (!code) return '—';
+    return INITIAL_FUNCTION_LABELS[code] ?? code;
+  }
+
+  formatNetworks(networks: WellOverviewRow['monitoring_networks']): string {
+    if (!networks.length) return '—';
+    return networks.map((network) => network.name).join(', ');
   }
 
   formatAge(days: number | null): string {

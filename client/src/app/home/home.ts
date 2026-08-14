@@ -1,4 +1,13 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnDestroy,
+  OnInit,
+  ViewChild,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -29,6 +38,56 @@ const CLASSIFICATION_LABELS: Record<string, string> = {
   high: 'Hoog',
   very_high: 'Zeer hoog',
 };
+
+const INITIAL_FUNCTION_LABELS: Record<string, string> = {
+  stand: 'Waterstand',
+  kwaliteit: 'Kwaliteit',
+  combinatie: 'Combinatie',
+  onbekend: 'Onbekend',
+};
+
+const GROUNDWATER_ASPECT_LABELS: Record<string, string> = {
+  kwantiteit: 'Kwantiteit',
+  kwaliteit: 'Kwaliteit',
+  combinatie: 'Combinatie',
+};
+
+interface WellSpec {
+  label: string;
+  value: string;
+}
+
+const NO_VALUE = '—';
+
+function formatIsoDate(iso: string | null): string {
+  if (!iso) return NO_VALUE;
+  return new Date(iso).toLocaleDateString('nl-NL', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatMeters(v: number | null): string {
+  if (v === null || v === undefined) return NO_VALUE;
+  return v.toFixed(2) + ' m NAP';
+}
+
+function formatDepthRange(top: number | null, bottom: number | null): string {
+  if (top === null || bottom === null) return formatMeters(top ?? bottom);
+  return `${top.toFixed(2)} – ${bottom.toFixed(2)} m NAP`;
+}
+
+function formatDateRange(from: string | null, to: string | null): string {
+  if (!from) return `tot ${formatIsoDate(to)}`;
+  if (!to) return `vanaf ${formatIsoDate(from)}`;
+  return `${formatIsoDate(from)} – ${formatIsoDate(to)}`;
+}
+
+function formatInitialFunction(code: string | null): string {
+  if (!code) return NO_VALUE;
+  return INITIAL_FUNCTION_LABELS[code] ?? code;
+}
 
 function toIso(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -116,6 +175,38 @@ export class HomeComponent implements OnInit, OnDestroy {
   seriesLoading = signal(false);
   series = signal<WellSeries | null>(null);
   showChart = signal(false);
+
+  readonly wellSpecs = computed<WellSpec[]>(() => {
+    const well = this.selectedWell();
+    if (!well) return [];
+
+    const specs: WellSpec[] = [];
+    if (well.well_construction_date) {
+      specs.push({ label: 'Ingericht', value: formatIsoDate(well.well_construction_date) });
+    }
+    if (well.initial_function) {
+      specs.push({ label: 'Functie', value: formatInitialFunction(well.initial_function) });
+    }
+    if (well.screen_top_m !== null || well.screen_bottom_m !== null) {
+      specs.push({
+        label: 'Filter',
+        value: formatDepthRange(well.screen_top_m, well.screen_bottom_m),
+      });
+    }
+    if (well.number_of_monitoring_tubes > 1) {
+      specs.push({
+        label: 'Buis',
+        value: `${well.tube_number} van ${well.number_of_monitoring_tubes}`,
+      });
+    }
+    if (well.research_first_date || well.research_last_date) {
+      specs.push({
+        label: 'Meetreeks',
+        value: formatDateRange(well.research_first_date, well.research_last_date),
+      });
+    }
+    return specs;
+  });
 
   readonly classifications = Object.keys(CLASSIFICATION_LABELS);
   readonly classificationColors = CLASSIFICATION_COLORS;
@@ -408,21 +499,20 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   formatDate(iso: string | null): string {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('nl-NL', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    return formatIsoDate(iso);
   }
 
   formatValue(v: number | null): string {
-    if (v === null || v === undefined) return '—';
-    return v.toFixed(2) + ' m NAP';
+    return formatMeters(v);
   }
 
   formatPercentile(p: number | null): string {
-    if (p === null || p === undefined) return '—';
+    if (p === null || p === undefined) return NO_VALUE;
     return Math.round(p * 100) + 'e percentiel';
+  }
+
+  formatGroundwaterAspect(code: string | null): string {
+    if (!code) return '';
+    return GROUNDWATER_ASPECT_LABELS[code] ?? code;
   }
 }

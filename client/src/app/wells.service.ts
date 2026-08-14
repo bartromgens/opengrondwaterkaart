@@ -29,6 +29,14 @@ export interface OrganizationInfo {
   kvk_url: string;
 }
 
+export interface MonitoringNetworkInfo {
+  bro_id: string;
+  name: string;
+  monitoring_purpose: string | null;
+  groundwater_aspect: string | null;
+  bro_object_url: string | null;
+}
+
 export interface WellDetail {
   bro_id: string;
   tube_number: number;
@@ -39,6 +47,12 @@ export interface WellDetail {
   tube_top_m: number | null;
   screen_top_m: number | null;
   screen_bottom_m: number | null;
+  well_construction_date: string | null;
+  initial_function: string | null;
+  number_of_monitoring_tubes: number;
+  research_first_date: string | null;
+  research_last_date: string | null;
+  monitoring_networks: MonitoringNetworkInfo[];
   owner: OrganizationInfo | null;
   bronhouder: OrganizationInfo | null;
   bro_object_url: string | null;
@@ -90,10 +104,21 @@ export type MeasurementFrequency =
   | 'yearly'
   | 'irregular';
 
+export interface WellOverviewNetwork {
+  bro_id: string;
+  name: string;
+}
+
 export interface WellOverviewRow {
   bro_id: string;
   nitg_code: string;
   name: string;
+  well_construction_date: string | null;
+  initial_function: string | null;
+  number_of_monitoring_tubes: number;
+  research_first_date: string | null;
+  research_last_date: string | null;
+  monitoring_networks: WellOverviewNetwork[];
   first_measured_on: string | null;
   last_measured_on: string | null;
   measurement_count: number;
@@ -110,6 +135,12 @@ export interface WellOverviewResponse {
 
 export type FrequencyDistribution = Record<MeasurementFrequency | 'unknown' | 'no_data', number>;
 
+export interface AgeDistributionBucket {
+  key: string;
+  label: string;
+  count: number;
+}
+
 export interface WellsStats {
   total_wells: number;
   wells_with_data: number;
@@ -117,6 +148,7 @@ export interface WellsStats {
   newest_measured_on: string | null;
   newest_measurement_age_days: number | null;
   frequency_distribution: FrequencyDistribution;
+  latest_measurement_age_distribution: AgeDistributionBucket[];
 }
 
 @Injectable({ providedIn: 'root' })

@@ -9,8 +9,8 @@
   <div class="wells-overview-container">
     <h1>Overzicht putten</h1>
     <p class="intro">
-      Alle geregistreerde putten met de eerste en laatste meting, het aantal metingen en de
-      gemiddelde meetfrequentie.
+      Alle geregistreerde putten met inrichtingsdatum, functie, meetnetten, meetreeks en
+      meetfrequentie.
     </p>
 
     @if (stats(); as s) {
@@ -47,6 +47,14 @@
           }
         </div>
       </div>
+
+      @if (ageChartOption(); as ageOption) {
+        <div class="distribution age-distribution">
+          <h2>Leeftijd nieuwste meting</h2>
+          <p class="distribution-hint">Aantal putten per ouderdom van hun meest recente meting.</p>
+          <div echarts [options]="ageOption" class="age-chart"></div>
+        </div>
+      }
     } @else if (statsLoading()) {
       <div class="stats-loading">
         <mat-spinner diameter="28"></mat-spinner>
@@ -81,6 +89,39 @@
         <ng-container matColumnDef="nitg_code">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>NITG-code</th>
           <td mat-cell *matCellDef="let row">{{ row.nitg_code || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="well_construction_date">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [start]="'desc'">Ingericht</th>
+          <td mat-cell *matCellDef="let row">{{ formatDate(row.well_construction_date) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="initial_function">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Functie</th>
+          <td mat-cell *matCellDef="let row">{{ formatInitialFunction(row.initial_function) }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="number_of_monitoring_tubes">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [start]="'desc'">Buizen</th>
+          <td mat-cell *matCellDef="let row">{{ row.number_of_monitoring_tubes }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="research_first_date">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [start]="'desc'">Meetreeks</th>
+          <td mat-cell *matCellDef="let row">
+            @if (row.research_first_date || row.research_last_date) {
+              {{ formatDate(row.research_first_date) }} – {{ formatDate(row.research_last_date) }}
+            } @else {
+              —
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="monitoring_networks">
+          <th mat-header-cell *matHeaderCellDef>Meetnetten</th>
+          <td mat-cell *matCellDef="let row" class="networks-cell">
+            {{ formatNetworks(row.monitoring_networks) }}
+          </td>
         </ng-container>
 
         <ng-container matColumnDef="first_measured_on">

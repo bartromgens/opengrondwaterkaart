@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.contrib.gis.admin import GISModelAdmin
 
-from .models import IngestRun, Measurement, Organization, Well, WellBaseline
+from .models import (
+    IngestRun,
+    Measurement,
+    Organization,
+    MonitoringNetwork,
+    Well,
+    WellBaseline,
+)
 
 
 @admin.register(Well)
@@ -12,7 +19,11 @@ class WellAdmin(GISModelAdmin):
         "name",
         "tube_number",
         "nitg_code",
+        "research_first_date",
         "research_last_date",
+        "well_construction_date",
+        "initial_function",
+        "number_of_monitoring_tubes",
         "location_coords",
         "ground_level_m",
         "tube_top_m",
@@ -24,7 +35,8 @@ class WellAdmin(GISModelAdmin):
         "pdok_updated_at",
     )
     search_fields = ("bro_id", "gld_bro_id", "nitg_code", "name")
-    list_filter = ("tube_number",)
+    list_filter = ("tube_number", "initial_function")
+    filter_horizontal = ("monitoring_networks",)
 
     @admin.display(description="Location")
     def location_coords(self, obj: Well) -> str:
@@ -66,6 +78,20 @@ class WellBaselineAdmin(admin.ModelAdmin):
 class OrganizationAdmin(admin.ModelAdmin):
     list_display = ("kvk_number", "name", "resolved_at")
     search_fields = ("kvk_number", "name")
+
+
+@admin.register(MonitoringNetwork)
+class MonitoringNetworkAdmin(admin.ModelAdmin):
+    list_display = (
+        "bro_id",
+        "name",
+        "monitoring_purpose",
+        "groundwater_aspect",
+        "start_date",
+        "end_date",
+    )
+    search_fields = ("bro_id", "name")
+    list_filter = ("groundwater_aspect", "monitoring_purpose")
 
 
 @admin.register(IngestRun)

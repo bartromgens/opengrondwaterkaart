@@ -20,6 +20,8 @@ ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
 LAYER_GMW = "gm_gmw"
 LAYER_TUBE = "gm_gmw_monitoringtube"
 LAYER_GLD = "gm_gld"
+LAYER_GMN = "gm_gmn"
+LAYER_GMN_MEASURINGPOINT = "gm_gmn_measuringpoint"
 
 
 def _atom_url() -> str:
