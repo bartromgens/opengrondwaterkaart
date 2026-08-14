@@ -6,42 +6,67 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from .frequency import measurement_frequency, refresh_well_frequencies
 from .management.commands.bootstrap_wells import LAYER_GLD, LAYER_GMW, LAYER_TUBE
 from .management.commands.sync_bro_organizations import (
     Command as SyncOrganizationsCommand,
 )
 from .management.commands.sync_bro_organizations import parse_organizations
 from .models import Measurement, MonitoringNetwork, Organization, Well
-from .views import _measurement_frequency
 
 
 class MeasurementFrequencyTests(TestCase):
     def test_no_data_returns_none(self):
-        self.assertIsNone(_measurement_frequency([]))
+        self.assertIsNone(measurement_frequency([]))
 
     def test_single_measurement_returns_none(self):
-        self.assertIsNone(_measurement_frequency([date(2020, 1, 1)]))
+        self.assertIsNone(measurement_frequency([date(2020, 1, 1)]))
 
     def test_daily_measurements(self):
         dates = [date(2020, 1, 1) + timedelta(days=i) for i in range(31)]
-        self.assertEqual(_measurement_frequency(dates), "daily")
+        self.assertEqual(measurement_frequency(dates), "daily")
 
     def test_weekly_measurements(self):
         dates = [date(2020, 1, 1) + timedelta(weeks=i) for i in range(13)]
-        self.assertEqual(_measurement_frequency(dates), "weekly")
+        self.assertEqual(measurement_frequency(dates), "weekly")
 
     def test_monthly_measurements(self):
         dates = [date(2020, 1, 1) + timedelta(days=30 * i) for i in range(13)]
-        self.assertEqual(_measurement_frequency(dates), "monthly")
+        self.assertEqual(measurement_frequency(dates), "monthly")
 
     def test_irregular_measurements(self):
         dates = [date(2000, 1, 1), date(2012, 1, 1), date(2024, 1, 1)]
-        self.assertEqual(_measurement_frequency(dates), "irregular")
+        self.assertEqual(measurement_frequency(dates), "irregular")
 
     def test_long_gap_does_not_override_daily_median(self):
         dates = [date(2020, 1, 1) + timedelta(days=i) for i in range(20)]
         dates += [date(2020, 1, 20) + timedelta(days=120 + i) for i in range(20)]
-        self.assertEqual(_measurement_frequency(dates), "daily")
+        self.assertEqual(measurement_frequency(dates), "daily")
+
+
+class StoredMeasurementFrequencyTests(TestCase):
+    def test_refresh_stores_and_clears_frequency(self):
+        well = Well.objects.create(
+            bro_id="BRO001", location=Point(5.0, 52.0, srid=4326)
+        )
+        Measurement.objects.create(
+            well=well, measured_on=date(2020, 1, 1), value_m_nap=1.0
+        )
+        Measurement.objects.create(
+            well=well, measured_on=date(2020, 1, 8), value_m_nap=1.1
+        )
+        Measurement.objects.create(
+            well=well, measured_on=date(2020, 1, 15), value_m_nap=1.2
+        )
+
+        self.assertEqual(refresh_well_frequencies(), 1)
+        well.refresh_from_db()
+        self.assertEqual(well.measurement_frequency, "weekly")
+
+        Measurement.objects.all().delete()
+        self.assertEqual(refresh_well_frequencies(), 0)
+        well.refresh_from_db()
+        self.assertIsNone(well.measurement_frequency)
 
 
 class WellsOverviewViewTests(TestCase):
@@ -84,6 +109,7 @@ class WellsOverviewViewTests(TestCase):
         Measurement.objects.create(
             well=self.well_with_data, measured_on=date(2020, 1, 15), value_m_nap=1.2
         )
+        refresh_well_frequencies()
 
     def test_returns_stats_for_well_with_measurements(self):
         response = self.client.get(reverse("wells-overview"))
@@ -394,6 +420,7 @@ class WellsStatsViewTests(TestCase):
         Measurement.objects.create(
             well=self.well_yearly, measured_on=date(2020, 1, 1), value_m_nap=2.1
         )
+        refresh_well_frequencies()
 
     def test_returns_totals_and_distribution(self):
         response = self.client.get(reverse("wells-stats"))
@@ -429,6 +456,7 @@ class WellsStatsViewTests(TestCase):
 
     def test_handles_no_measurements_at_all(self):
         Measurement.objects.all().delete()
+        refresh_well_frequencies()
         response = self.client.get(reverse("wells-stats"))
         body = response.json()
 

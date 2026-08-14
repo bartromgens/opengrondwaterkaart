@@ -70,6 +70,7 @@ Run these management commands in order to populate the database.
 python manage.py bootstrap_wells
 
 # 2. Fetch measurements from the BRO API for all active wells
+#    (also stores per-well measurement frequency used by the overview)
 python manage.py fetch_measurements
 
 # 3. (Re)compute seasonal baseline percentiles — run monthly

@@ -25,11 +25,27 @@ class MonitoringNetwork(models.Model):
         return self.name or self.bro_id
 
 
+class MeasurementFrequency(models.TextChoices):
+    DAILY = "daily", "Daily"
+    WEEKLY = "weekly", "Weekly"
+    MONTHLY = "monthly", "Monthly"
+    QUARTERLY = "quarterly", "Quarterly"
+    YEARLY = "yearly", "Yearly"
+    IRREGULAR = "irregular", "Irregular"
+
+
 class Well(models.Model):
     bro_id = models.CharField(max_length=40, unique=True, db_index=True)
     gld_bro_id = models.CharField(max_length=40, blank=True, db_index=True)
     research_first_date = models.DateField(null=True, blank=True)
     research_last_date = models.DateField(null=True, blank=True, db_index=True)
+    measurement_frequency = models.CharField(
+        max_length=20,
+        choices=MeasurementFrequency.choices,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     tube_number = models.PositiveSmallIntegerField(default=1)
     nitg_code = models.CharField(max_length=20, blank=True)
     name = models.CharField(max_length=120, blank=True)

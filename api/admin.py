@@ -21,6 +21,7 @@ class WellAdmin(GISModelAdmin):
         "nitg_code",
         "research_first_date",
         "research_last_date",
+        "measurement_frequency",
         "well_construction_date",
         "initial_function",
         "number_of_monitoring_tubes",
@@ -35,7 +36,7 @@ class WellAdmin(GISModelAdmin):
         "pdok_updated_at",
     )
     search_fields = ("bro_id", "gld_bro_id", "nitg_code", "name")
-    list_filter = ("tube_number", "initial_function")
+    list_filter = ("tube_number", "initial_function", "measurement_frequency")
     filter_horizontal = ("monitoring_networks",)
 
     @admin.display(description="Location")
