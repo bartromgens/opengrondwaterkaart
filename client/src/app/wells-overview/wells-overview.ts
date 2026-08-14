@@ -123,6 +123,7 @@ export class WellsOverviewComponent implements OnInit {
   readonly displayedColumns = [
     'name',
     'nitg_code',
+    'owner',
     'well_construction_date',
     'initial_function',
     'number_of_monitoring_tubes',

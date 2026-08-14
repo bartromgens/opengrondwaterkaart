@@ -3,7 +3,8 @@ from datetime import date, timedelta
 from typing import Iterable
 
 from django.contrib.gis.geos import Polygon
-from django.db.models import Count, F, Max, Min, Prefetch
+from django.db.models import Count, F, Max, Min, OuterRef, Prefetch, Subquery, Value
+from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
 from rest_framework.decorators import api_view
 from rest_framework.request import Request
@@ -20,8 +21,6 @@ from .models import (
     Well,
     WellBaseline,
 )
-
-KVK_SEARCH_URL = "https://www.kvk.nl/zoeken/?kvknummer="
 
 FREQUENCY_THRESHOLDS_DAYS = (
     (1.5, "daily"),
@@ -151,17 +150,20 @@ def _dict_to_baseline(d: dict) -> _DictBaseline:
     return _DictBaseline(d)
 
 
+def _organization_dict(kvk: str, name: str | None) -> dict[str, str | None]:
+    return {
+        "kvk": kvk,
+        "name": name,
+    }
+
+
 def _organization_payload(
     kvk: str, organizations_by_kvk: dict[str, Organization]
 ) -> dict | None:
     if not kvk:
         return None
     org = organizations_by_kvk.get(kvk)
-    return {
-        "kvk": kvk,
-        "name": org.name if org else None,
-        "kvk_url": f"{KVK_SEARCH_URL}{kvk}",
-    }
+    return _organization_dict(kvk, org.name if org else None)
 
 
 @api_view(["GET"])
@@ -431,6 +433,7 @@ OVERVIEW_ORDER_FIELDS = {
     "name",
     "bro_id",
     "nitg_code",
+    "owner",
     "well_construction_date",
     "initial_function",
     "number_of_monitoring_tubes",
@@ -458,7 +461,14 @@ def _overview_ordering(request: Request) -> tuple[str, str]:
         raw, field = OVERVIEW_DEFAULT_ORDERING, OVERVIEW_DEFAULT_ORDERING.lstrip("-")
     descending = raw.startswith("-")
 
-    if field in (
+    if field == "owner":
+        owner_sort = Coalesce("owner_name", NullIf("owner_kvk", Value("")))
+        expr = (
+            owner_sort.desc(nulls_last=True)
+            if descending
+            else owner_sort.asc(nulls_last=True)
+        )
+    elif field in (
         "first_measured_on",
         "last_measured_on",
         "well_construction_date",
@@ -495,6 +505,11 @@ def wells_overview(request: Request) -> Response:
         first_measured_on=Min("measurements__measured_on"),
         last_measured_on=Max("measurements__measured_on"),
         measurement_count=Count("measurements"),
+        owner_name=Subquery(
+            Organization.objects.filter(kvk_number=OuterRef("owner_kvk")).values(
+                "name"
+            )[:1]
+        ),
     ).order_by(order_expr, "bro_id")
 
     total = qs.count()
@@ -510,6 +525,8 @@ def wells_overview(request: Request) -> Response:
             "number_of_monitoring_tubes",
             "research_first_date",
             "research_last_date",
+            "owner_kvk",
+            "owner_name",
             "first_measured_on",
             "last_measured_on",
             "measurement_count",
@@ -543,6 +560,11 @@ def wells_overview(request: Request) -> Response:
                 else None
             ),
             "monitoring_networks": networks_by_well_id.get(row["id"], []),
+            "owner": (
+                _organization_dict(row["owner_kvk"], row["owner_name"])
+                if row["owner_kvk"]
+                else None
+            ),
             "first_measured_on": (
                 row["first_measured_on"].isoformat()
                 if row["first_measured_on"]

@@ -163,25 +163,17 @@
           @if (selectedWell()!.bronhouder) {
             <div class="management-row">
               <span class="management-label">Bronhouder</span>
-              <a
-                class="management-value"
-                [href]="selectedWell()!.bronhouder!.kvk_url"
-                target="_blank"
-                rel="noopener"
-                >{{ selectedWell()!.bronhouder!.name ?? selectedWell()!.bronhouder!.kvk }}</a
-              >
+              <span class="management-value">{{
+                selectedWell()!.bronhouder!.name ?? selectedWell()!.bronhouder!.kvk
+              }}</span>
             </div>
           }
           @if (selectedWell()!.owner) {
             <div class="management-row">
               <span class="management-label">Eigenaar</span>
-              <a
-                class="management-value"
-                [href]="selectedWell()!.owner!.kvk_url"
-                target="_blank"
-                rel="noopener"
-                >{{ selectedWell()!.owner!.name ?? selectedWell()!.owner!.kvk }}</a
-              >
+              <span class="management-value">{{
+                selectedWell()!.owner!.name ?? selectedWell()!.owner!.kvk
+              }}</span>
             </div>
           }
           @if (selectedWell()!.bro_object_url) {

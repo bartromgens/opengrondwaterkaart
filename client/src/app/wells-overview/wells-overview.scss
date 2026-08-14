@@ -158,7 +158,8 @@
     }
   }
 
-  .networks-cell {
+  .networks-cell,
+  .owner-cell {
     max-width: 220px;
     white-space: normal;
     line-height: 1.35;

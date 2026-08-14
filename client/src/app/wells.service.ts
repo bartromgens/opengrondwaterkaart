@@ -26,7 +26,6 @@ export interface WellsGeoJSON {
 export interface OrganizationInfo {
   kvk: string;
   name: string | null;
-  kvk_url: string;
 }
 
 export interface MonitoringNetworkInfo {
@@ -119,6 +118,7 @@ export interface WellOverviewRow {
   research_first_date: string | null;
   research_last_date: string | null;
   monitoring_networks: WellOverviewNetwork[];
+  owner: OrganizationInfo | null;
   first_measured_on: string | null;
   last_measured_on: string | null;
   measurement_count: number;

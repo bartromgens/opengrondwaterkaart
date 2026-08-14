@@ -9,7 +9,7 @@
   <div class="wells-overview-container">
     <h1>Overzicht putten</h1>
     <p class="intro">
-      Alle geregistreerde putten met inrichtingsdatum, functie, meetnetten, meetreeks en
+      Alle geregistreerde putten met eigenaar, inrichtingsdatum, functie, meetnetten, meetreeks en
       meetfrequentie.
     </p>
 
@@ -89,6 +89,17 @@
         <ng-container matColumnDef="nitg_code">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>NITG-code</th>
           <td mat-cell *matCellDef="let row">{{ row.nitg_code || '—' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="owner">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Eigenaar</th>
+          <td mat-cell *matCellDef="let row" class="owner-cell">
+            @if (row.owner) {
+              {{ row.owner.name ?? row.owner.kvk }}
+            } @else {
+              —
+            }
+          </td>
         </ng-container>
 
         <ng-container matColumnDef="well_construction_date">

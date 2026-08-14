@@ -51,11 +51,17 @@ class WellsOverviewViewTests(TestCase):
             nitg_code="NITG001",
             name="Put A",
             location=Point(5.0, 52.0, srid=4326),
+            owner_kvk="01182779",
             well_construction_date=date(2011, 6, 6),
             initial_function="stand",
             number_of_monitoring_tubes=2,
             research_first_date=date(2012, 1, 1),
             research_last_date=date(2024, 6, 1),
+        )
+        Organization.objects.create(
+            kvk_number="01182779",
+            name="Gemeente Zuidhorn",
+            resolved_at=timezone.now(),
         )
         self.well_without_data = Well.objects.create(
             bro_id="BRO002",
@@ -99,6 +105,9 @@ class WellsOverviewViewTests(TestCase):
             by_bro_id["BRO001"]["monitoring_networks"],
             [{"bro_id": "GMN001", "name": "Meetnet Noord"}],
         )
+        self.assertEqual(by_bro_id["BRO001"]["owner"]["kvk"], "01182779")
+        self.assertEqual(by_bro_id["BRO001"]["owner"]["name"], "Gemeente Zuidhorn")
+        self.assertNotIn("kvk_url", by_bro_id["BRO001"]["owner"])
 
     def test_returns_nulls_for_well_without_measurements(self):
         response = self.client.get(reverse("wells-overview"))
@@ -112,6 +121,7 @@ class WellsOverviewViewTests(TestCase):
         self.assertIsNone(by_bro_id["BRO002"]["initial_function"])
         self.assertEqual(by_bro_id["BRO002"]["number_of_monitoring_tubes"], 1)
         self.assertEqual(by_bro_id["BRO002"]["monitoring_networks"], [])
+        self.assertIsNone(by_bro_id["BRO002"]["owner"])
 
     def test_default_ordering_puts_wells_with_data_first(self):
         response = self.client.get(reverse("wells-overview"))
@@ -140,6 +150,21 @@ class WellsOverviewViewTests(TestCase):
         results = response.json()["results"]
         self.assertEqual(results[0]["bro_id"], "BRO001")
         self.assertEqual(results[1]["bro_id"], "BRO002")
+
+    def test_can_order_by_owner(self):
+        self.well_without_data.owner_kvk = "11111111"
+        self.well_without_data.save(update_fields=["owner_kvk"])
+        Organization.objects.create(
+            kvk_number="11111111",
+            name="Alpha Water",
+            resolved_at=timezone.now(),
+        )
+
+        response = self.client.get(reverse("wells-overview"), {"ordering": "owner"})
+        self.assertEqual(response.json()["ordering"], "owner")
+        results = response.json()["results"]
+        self.assertEqual(results[0]["bro_id"], "BRO002")
+        self.assertEqual(results[1]["bro_id"], "BRO001")
 
 
 class _FakeFionaCollection(list):
@@ -298,11 +323,11 @@ class WellDetailOrganizationTests(TestCase):
 
         self.assertEqual(body["bronhouder"]["kvk"], "73552208")
         self.assertEqual(body["bronhouder"]["name"], "Gemeente Westerveld")
-        self.assertIn("73552208", body["bronhouder"]["kvk_url"])
+        self.assertNotIn("kvk_url", body["bronhouder"])
 
         self.assertEqual(body["owner"]["kvk"], "01182779")
         self.assertIsNone(body["owner"]["name"])
-        self.assertIn("01182779", body["owner"]["kvk_url"])
+        self.assertNotIn("kvk_url", body["owner"])
 
         self.assertEqual(
             body["bro_object_url"],

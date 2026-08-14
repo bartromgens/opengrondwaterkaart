@@ -327,13 +327,8 @@ $slider-track-start: $slider-margin + $slider-end-offset;
 }
 
 .management-value {
-  color: #2a5db0;
-  text-decoration: none;
+  color: #333;
   text-align: right;
-
-  &:hover {
-    text-decoration: underline;
-  }
 }
 
 .management-bro-link {
