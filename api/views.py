@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date, timedelta
 
 from django.contrib.gis.geos import Polygon
@@ -12,10 +13,13 @@ from .models import (
     IngestRun,
     IngestRunStatus,
     Measurement,
+    Organization,
     PeriodType,
     Well,
     WellBaseline,
 )
+
+KVK_SEARCH_URL = "https://www.kvk.nl/zoeken/?kvknummer="
 
 FREQUENCY_THRESHOLDS_DAYS = (
     (1.5, "daily"),
@@ -145,6 +149,19 @@ def _dict_to_baseline(d: dict) -> _DictBaseline:
     return _DictBaseline(d)
 
 
+def _organization_payload(
+    kvk: str, organizations_by_kvk: dict[str, Organization]
+) -> dict | None:
+    if not kvk:
+        return None
+    org = organizations_by_kvk.get(kvk)
+    return {
+        "kvk": kvk,
+        "name": org.name if org else None,
+        "kvk_url": f"{KVK_SEARCH_URL}{kvk}",
+    }
+
+
 @api_view(["GET"])
 def well_detail(request: Request, bro_id: str) -> Response:
     try:
@@ -173,6 +190,12 @@ def well_detail(request: Request, bro_id: str) -> Response:
     if value is not None and baseline is not None:
         classification, percentile = classify_value(value, baseline)
 
+    org_kvks = [kvk for kvk in (well.owner_kvk, well.bronhouder_kvk) if kvk]
+    organizations_by_kvk = {
+        org.kvk_number: org
+        for org in Organization.objects.filter(kvk_number__in=org_kvks)
+    }
+
     data: dict = {
         "bro_id": well.bro_id,
         "tube_number": well.tube_number,
@@ -183,6 +206,9 @@ def well_detail(request: Request, bro_id: str) -> Response:
         "tube_top_m": well.tube_top_m,
         "screen_top_m": well.screen_top_m,
         "screen_bottom_m": well.screen_bottom_m,
+        "owner": _organization_payload(well.owner_kvk, organizations_by_kvk),
+        "bronhouder": _organization_payload(well.bronhouder_kvk, organizations_by_kvk),
+        "bro_object_url": well.bro_object_url or None,
         "status": {
             "value_m_nap": value,
             "measured_on": selected_date.isoformat() if value is not None else None,
@@ -399,6 +425,67 @@ def wells_overview(request: Request) -> Response:
             "page_size": page_size,
             "ordering": ordering,
             "results": results,
+        }
+    )
+
+
+FREQUENCY_DISTRIBUTION_ORDER = [
+    "daily",
+    "weekly",
+    "monthly",
+    "quarterly",
+    "yearly",
+    "irregular",
+    "unknown",
+    "no_data",
+]
+
+
+@api_view(["GET"])
+def wells_stats(request: Request) -> Response:
+    total_wells = Well.objects.count()
+
+    measurement_stats = list(
+        Measurement.objects.values("well_id").annotate(
+            first_measured_on=Min("measured_on"),
+            last_measured_on=Max("measured_on"),
+            measurement_count=Count("id"),
+        )
+    )
+    wells_with_data = len(measurement_stats)
+
+    frequency_counts: Counter = Counter({"no_data": total_wells - wells_with_data})
+    newest_measured_on: date | None = None
+    for row in measurement_stats:
+        frequency = (
+            _measurement_frequency(
+                row["first_measured_on"],
+                row["last_measured_on"],
+                row["measurement_count"],
+            )
+            or "unknown"
+        )
+        frequency_counts[frequency] += 1
+        if newest_measured_on is None or row["last_measured_on"] > newest_measured_on:
+            newest_measured_on = row["last_measured_on"]
+
+    newest_measurement_age_days = (
+        (timezone.localdate() - newest_measured_on).days if newest_measured_on else None
+    )
+
+    return Response(
+        {
+            "total_wells": total_wells,
+            "wells_with_data": wells_with_data,
+            "wells_without_data": total_wells - wells_with_data,
+            "newest_measured_on": (
+                newest_measured_on.isoformat() if newest_measured_on else None
+            ),
+            "newest_measurement_age_days": newest_measurement_age_days,
+            "frequency_distribution": {
+                label: frequency_counts.get(label, 0)
+                for label in FREQUENCY_DISTRIBUTION_ORDER
+            },
         }
     )
 

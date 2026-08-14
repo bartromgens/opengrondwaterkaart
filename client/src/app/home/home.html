@@ -115,6 +115,54 @@
         }
       </div>
 
+      @if (selectedWell()!.owner || selectedWell()!.bronhouder) {
+        <div class="panel-section-label">Beheer</div>
+        <div class="panel-management">
+          @if (selectedWell()!.bronhouder) {
+            <div class="management-row">
+              <span class="management-label">Bronhouder</span>
+              <a
+                class="management-value"
+                [href]="selectedWell()!.bronhouder!.kvk_url"
+                target="_blank"
+                rel="noopener"
+                >{{ selectedWell()!.bronhouder!.name ?? selectedWell()!.bronhouder!.kvk }}</a
+              >
+            </div>
+          }
+          @if (selectedWell()!.owner) {
+            <div class="management-row">
+              <span class="management-label">Eigenaar</span>
+              <a
+                class="management-value"
+                [href]="selectedWell()!.owner!.kvk_url"
+                target="_blank"
+                rel="noopener"
+                >{{ selectedWell()!.owner!.name ?? selectedWell()!.owner!.kvk }}</a
+              >
+            </div>
+          }
+          @if (selectedWell()!.bro_object_url) {
+            <a
+              class="management-bro-link"
+              [href]="selectedWell()!.bro_object_url!"
+              target="_blank"
+              rel="noopener"
+              >BRO-registratie bekijken</a
+            >
+          }
+          <p class="management-note">
+            Voor ontbrekende of onjuiste putgegevens: neem contact op met de bronhouder of het
+            <a
+              href="https://basisregistratieondergrond.nl/service-contact/"
+              target="_blank"
+              rel="noopener"
+              >BRO-helpdesk</a
+            >.
+          </p>
+        </div>
+      }
+
       @if (selectedWell()!.baseline) {
         <div class="panel-section-label">Historische bandbreedte (week van selectie)</div>
         <div class="baseline-bar">

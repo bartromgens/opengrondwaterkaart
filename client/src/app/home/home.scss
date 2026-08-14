@@ -306,6 +306,62 @@ $slider-track-start: $slider-margin + $slider-end-offset;
   margin-top: 4px;
 }
 
+.panel-management {
+  padding: 0 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.management-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.management-label {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.management-value {
+  color: #2a5db0;
+  text-decoration: none;
+  text-align: right;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.management-bro-link {
+  font-size: 12px;
+  color: #2a5db0;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.management-note {
+  font-size: 11px;
+  color: #999;
+  margin: 4px 0 0;
+  line-height: 1.4;
+
+  a {
+    color: #2a5db0;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
 .baseline-bar {
   display: grid;
   grid-template-columns: auto 1fr auto 1fr auto 1fr;

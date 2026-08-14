@@ -1,4 +1,5 @@
-import { Component, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { Component, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { DecimalPipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -7,7 +8,13 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSortModule, Sort } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
 
-import { MeasurementFrequency, WellOverviewRow, WellsService } from '../wells.service';
+import {
+  FrequencyDistribution,
+  MeasurementFrequency,
+  WellOverviewRow,
+  WellsService,
+  WellsStats,
+} from '../wells.service';
 
 const FREQUENCY_LABELS: Record<MeasurementFrequency, string> = {
   daily: 'Dagelijks',
@@ -18,9 +25,34 @@ const FREQUENCY_LABELS: Record<MeasurementFrequency, string> = {
   irregular: 'Onregelmatig',
 };
 
+const DISTRIBUTION_LABELS: Record<keyof FrequencyDistribution, string> = {
+  ...FREQUENCY_LABELS,
+  unknown: 'Onbekend',
+  no_data: 'Geen data',
+};
+
+const DISTRIBUTION_ORDER: (keyof FrequencyDistribution)[] = [
+  'daily',
+  'weekly',
+  'monthly',
+  'quarterly',
+  'yearly',
+  'irregular',
+  'unknown',
+  'no_data',
+];
+
+export interface DistributionBar {
+  key: keyof FrequencyDistribution;
+  label: string;
+  count: number;
+  percent: number;
+}
+
 @Component({
   selector: 'app-wells-overview',
   imports: [
+    DecimalPipe,
     RouterLink,
     MatButtonModule,
     MatIconModule,
@@ -51,10 +83,26 @@ export class WellsOverviewComponent implements OnInit {
   loading = signal(false);
   pageSize = signal(25);
 
+  stats = signal<WellsStats | null>(null);
+  statsLoading = signal(false);
+
+  distributionBars = computed<DistributionBar[]>(() => {
+    const distribution = this.stats()?.frequency_distribution;
+    if (!distribution) return [];
+    const max = Math.max(...Object.values(distribution), 1);
+    return DISTRIBUTION_ORDER.filter((key) => distribution[key] > 0).map((key) => ({
+      key,
+      label: DISTRIBUTION_LABELS[key],
+      count: distribution[key],
+      percent: (distribution[key] / max) * 100,
+    }));
+  });
+
   private ordering = '-last_measured_on';
 
   ngOnInit(): void {
     this.load(0, this.pageSize(), this.ordering);
+    this.loadStats();
   }
 
   onPageChange(event: PageEvent): void {
@@ -81,6 +129,26 @@ export class WellsOverviewComponent implements OnInit {
 
   formatFrequency(frequency: MeasurementFrequency | null): string {
     return frequency ? FREQUENCY_LABELS[frequency] : '—';
+  }
+
+  formatAge(days: number | null): string {
+    if (days === null) return '—';
+    if (days === 0) return 'vandaag';
+    if (days === 1) return '1 dag geleden';
+    return `${days} dagen geleden`;
+  }
+
+  private loadStats(): void {
+    this.statsLoading.set(true);
+    this.wellsService.getWellsStats().subscribe({
+      next: (stats) => {
+        this.stats.set(stats);
+        this.statsLoading.set(false);
+      },
+      error: () => {
+        this.statsLoading.set(false);
+      },
+    });
   }
 
   private load(pageIndex: number, pageSize: number, ordering: string): void {

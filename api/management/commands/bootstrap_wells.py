@@ -29,6 +29,9 @@ UPDATE_FIELDS = [
     "tube_top_m",
     "screen_top_m",
     "screen_bottom_m",
+    "owner_kvk",
+    "bronhouder_kvk",
+    "bro_object_url",
     "pdok_updated_at",
     "gld_bro_id",
     "research_last_date",
@@ -170,6 +173,11 @@ class Command(BaseCommand):
                         bro_id, (None, None)
                     )
                     gld_bro_id, research_last_date = link_map.get(bro_id, ("", None))
+                    owner_kvk = str(props.get("owner") or "").strip()
+                    bronhouder_kvk = str(
+                        props.get("delivery_accountable_party") or ""
+                    ).strip()
+                    bro_object_url = str(props.get("imbro_xml_url") or "").strip()
                     point = Point(lon, lat, srid=4326)
 
                     if bro_id in existing:
@@ -182,6 +190,9 @@ class Command(BaseCommand):
                         w.tube_top_m = None
                         w.screen_top_m = screen_top_m
                         w.screen_bottom_m = screen_bottom_m
+                        w.owner_kvk = owner_kvk
+                        w.bronhouder_kvk = bronhouder_kvk
+                        w.bro_object_url = bro_object_url
                         w.pdok_updated_at = now
                         w.gld_bro_id = gld_bro_id
                         w.research_last_date = research_last_date
@@ -198,6 +209,9 @@ class Command(BaseCommand):
                                 tube_top_m=None,
                                 screen_top_m=screen_top_m,
                                 screen_bottom_m=screen_bottom_m,
+                                owner_kvk=owner_kvk,
+                                bronhouder_kvk=bronhouder_kvk,
+                                bro_object_url=bro_object_url,
                                 pdok_updated_at=now,
                                 gld_bro_id=gld_bro_id,
                                 research_last_date=research_last_date,

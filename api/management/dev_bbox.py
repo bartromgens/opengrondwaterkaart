@@ -2,9 +2,9 @@ import logging
 from typing import Any
 
 from django.conf import settings
+from django.contrib.gis.geos import Point, Polygon
 
 logger = logging.getLogger(__name__)
-from django.contrib.gis.geos import Point, Polygon
 
 
 def get_dev_bbox() -> tuple[float, float, float, float] | None:

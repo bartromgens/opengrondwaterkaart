@@ -39,6 +39,85 @@
   }
 }
 
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: #f5f9ff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+
+  .stat-label {
+    color: #666;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+  }
+}
+
+.stats-loading {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0;
+}
+
+.distribution {
+  margin-bottom: 2rem;
+
+  h2 {
+    font-size: 1.2rem;
+    margin: 0 0 0.75rem;
+    color: #1a1a1a;
+  }
+}
+
+.distribution-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.distribution-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 48px;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.distribution-label {
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.distribution-bar-track {
+  background: #eef2f7;
+  border-radius: 4px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.distribution-bar-fill {
+  background: #2196f3;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.distribution-count {
+  text-align: right;
+  font-size: 0.9rem;
+  color: #555;
+}
+
 .table-wrapper {
   position: relative;
   overflow-x: auto;

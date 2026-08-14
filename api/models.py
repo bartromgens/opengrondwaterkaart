@@ -2,6 +2,15 @@ from django.contrib.gis.db import models
 from django.db.models import UniqueConstraint
 
 
+class Organization(models.Model):
+    kvk_number = models.CharField(max_length=8, primary_key=True)
+    name = models.CharField(max_length=200)
+    resolved_at = models.DateTimeField()
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.kvk_number})"
+
+
 class Well(models.Model):
     bro_id = models.CharField(max_length=40, unique=True, db_index=True)
     gld_bro_id = models.CharField(max_length=40, blank=True, db_index=True)
@@ -14,6 +23,9 @@ class Well(models.Model):
     tube_top_m = models.FloatField(null=True, blank=True)
     screen_top_m = models.FloatField(null=True, blank=True)
     screen_bottom_m = models.FloatField(null=True, blank=True)
+    owner_kvk = models.CharField(max_length=8, blank=True, db_index=True)
+    bronhouder_kvk = models.CharField(max_length=8, blank=True, db_index=True)
+    bro_object_url = models.URLField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     pdok_updated_at = models.DateTimeField(null=True, blank=True)
 

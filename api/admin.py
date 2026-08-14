@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.gis.admin import GISModelAdmin
 
-from .models import IngestRun, Measurement, Well, WellBaseline
+from .models import IngestRun, Measurement, Organization, Well, WellBaseline
 
 
 @admin.register(Well)
@@ -18,6 +18,8 @@ class WellAdmin(GISModelAdmin):
         "tube_top_m",
         "screen_top_m",
         "screen_bottom_m",
+        "owner_kvk",
+        "bronhouder_kvk",
         "created_at",
         "pdok_updated_at",
     )
@@ -58,6 +60,12 @@ class WellBaselineAdmin(admin.ModelAdmin):
     )
     list_filter = ("period_type",)
     search_fields = ("well__bro_id",)
+
+
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ("kvk_number", "name", "resolved_at")
+    search_fields = ("kvk_number", "name")
 
 
 @admin.register(IngestRun)

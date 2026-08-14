@@ -13,6 +13,46 @@
       gemiddelde meetfrequentie.
     </p>
 
+    @if (stats(); as s) {
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value">{{ s.total_wells }}</div>
+          <div class="stat-label">Putten totaal</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ s.wells_with_data }}</div>
+          <div class="stat-label">
+            Putten met metingen ({{ (s.wells_with_data / s.total_wells) * 100 | number: '1.0-0' }}%)
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ formatDate(s.newest_measured_on) }}</div>
+          <div class="stat-label">
+            Nieuwste meting ({{ formatAge(s.newest_measurement_age_days) }})
+          </div>
+        </div>
+      </div>
+
+      <div class="distribution">
+        <h2>Verdeling meetfrequentie</h2>
+        <div class="distribution-bars">
+          @for (bar of distributionBars(); track bar.key) {
+            <div class="distribution-row">
+              <span class="distribution-label">{{ bar.label }}</span>
+              <div class="distribution-bar-track">
+                <div class="distribution-bar-fill" [style.width.%]="bar.percent"></div>
+              </div>
+              <span class="distribution-count">{{ bar.count }}</span>
+            </div>
+          }
+        </div>
+      </div>
+    } @else if (statsLoading()) {
+      <div class="stats-loading">
+        <mat-spinner diameter="28"></mat-spinner>
+      </div>
+    }
+
     <div class="table-wrapper">
       @if (loading()) {
         <div class="loading-overlay">

@@ -74,9 +74,12 @@ python manage.py fetch_measurements
 
 # 3. (Re)compute seasonal baseline percentiles — run monthly
 python manage.py compute_baselines
+
+# 4. Sync well owner/bronhouder organization names — run monthly
+python manage.py sync_bro_organizations
 ```
 
-The `scripts/` directory contains cron-ready shell scripts for production that run the commands above inside the `api` Docker container: the nightly pipeline (`nightly_ingest.sh`) and monthly baseline recomputation (`monthly_baselines.sh`). Install them on the server with:
+The `scripts/` directory contains cron-ready shell scripts for production that run the commands above inside the `api` Docker container: the nightly pipeline (`nightly_ingest.sh`), monthly baseline recomputation (`monthly_baselines.sh`), and monthly organization sync (`monthly_organizations.sh`). Install them on the server with:
 
 ```bash
 crontab -e
@@ -85,6 +88,7 @@ crontab -e
 ```cron
 0 2 * * * /home/bart/opengrondwaterkaart/scripts/nightly_ingest.sh >> /home/bart/opengrondwaterkaart/log/nightly.log 2>&1
 0 3 1 * * /home/bart/opengrondwaterkaart/scripts/monthly_baselines.sh >> /home/bart/opengrondwaterkaart/log/baselines.log 2>&1
+0 4 1 * * /home/bart/opengrondwaterkaart/scripts/monthly_organizations.sh >> /home/bart/opengrondwaterkaart/log/organizations.log 2>&1
 ```
 
 Log output goes to the project's own `log/` directory (already writable by the deploy user), not `/var/log`, which requires root permissions.

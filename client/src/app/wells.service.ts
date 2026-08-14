@@ -23,6 +23,12 @@ export interface WellsGeoJSON {
   features: WellFeature[];
 }
 
+export interface OrganizationInfo {
+  kvk: string;
+  name: string | null;
+  kvk_url: string;
+}
+
 export interface WellDetail {
   bro_id: string;
   tube_number: number;
@@ -33,6 +39,9 @@ export interface WellDetail {
   tube_top_m: number | null;
   screen_top_m: number | null;
   screen_bottom_m: number | null;
+  owner: OrganizationInfo | null;
+  bronhouder: OrganizationInfo | null;
+  bro_object_url: string | null;
   status: {
     value_m_nap: number | null;
     measured_on: string | null;
@@ -99,6 +108,17 @@ export interface WellOverviewResponse {
   results: WellOverviewRow[];
 }
 
+export type FrequencyDistribution = Record<MeasurementFrequency | 'unknown' | 'no_data', number>;
+
+export interface WellsStats {
+  total_wells: number;
+  wells_with_data: number;
+  wells_without_data: number;
+  newest_measured_on: string | null;
+  newest_measurement_age_days: number | null;
+  frequency_distribution: FrequencyDistribution;
+}
+
 @Injectable({ providedIn: 'root' })
 export class WellsService {
   private http = inject(HttpClient);
@@ -141,5 +161,9 @@ export class WellsService {
       .set('page_size', opts.pageSize)
       .set('ordering', opts.ordering);
     return this.http.get<WellOverviewResponse>('/api/wells/overview/', { params });
+  }
+
+  getWellsStats(): Observable<WellsStats> {
+    return this.http.get<WellsStats>('/api/wells/stats/');
   }
 }
