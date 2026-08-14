@@ -41,7 +41,7 @@ def _extract_list_html(page_html: str) -> str:
     p_end = page_html.find("</p>", p_start)
     if p_start == -1 or p_end == -1:
         raise RuntimeError("Could not find organizations list <p> block.")
-    return page_html[p_start:p_end]
+    return page_html[p_start + len("<p>") : p_end]
 
 
 def parse_organizations(page_html: str) -> dict[str, str]:

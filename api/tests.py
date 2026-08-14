@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.gis.geos import Point
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -207,6 +207,7 @@ class BootstrapWellsOwnershipTests(TestCase):
             return _FakeFionaCollection([])
         return _FakeFionaCollection([])
 
+    @override_settings(DEV_WELL_BBOX=None)
     @patch("api.management.commands.bootstrap_wells.fiona")
     def test_upsert_wells_stores_ownership_and_metadata_fields(self, mock_fiona):
         mock_fiona.open.side_effect = self._fake_open
