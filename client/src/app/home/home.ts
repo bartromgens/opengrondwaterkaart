@@ -45,6 +45,51 @@ const CLASSIFICATION_COLORS: Record<string, string> = {
 };
 
 const NO_DATA_COLOR = '#cccccc';
+const SELECTED_WELL_STROKE = '#111111';
+
+const WELLS_LAYER = 'wells-circle';
+const WELLS_SELECTED_LAYER = 'wells-selected';
+
+const WELL_CIRCLE_COLOR: maplibregl.ExpressionSpecification = [
+  'case',
+  ['==', ['get', 'classification'], null],
+  NO_DATA_COLOR,
+  [
+    'match',
+    ['get', 'classification'],
+    'very_low',
+    CLASSIFICATION_COLORS['very_low'],
+    'low',
+    CLASSIFICATION_COLORS['low'],
+    'normal',
+    CLASSIFICATION_COLORS['normal'],
+    'high',
+    CLASSIFICATION_COLORS['high'],
+    'very_high',
+    CLASSIFICATION_COLORS['very_high'],
+    NO_DATA_COLOR,
+  ],
+];
+
+const WELL_CIRCLE_RADIUS: maplibregl.ExpressionSpecification = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  6,
+  3,
+  12,
+  7,
+];
+
+const SELECTED_WELL_CIRCLE_RADIUS: maplibregl.ExpressionSpecification = [
+  'interpolate',
+  ['linear'],
+  ['zoom'],
+  6,
+  6,
+  12,
+  12,
+];
 
 const CLASSIFICATION_LABELS: Record<string, string> = {
   very_low: 'Zeer laag',
@@ -187,6 +232,7 @@ export class HomeComponent implements OnInit, OnDestroy {
 
   map: maplibregl.Map | null = null;
   popup: maplibregl.Popup | null = null;
+  private highlightedWellId: string | null = null;
 
   loading = signal(true);
   dateLoading = signal(false);
@@ -286,7 +332,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         if (this.selectedWell()?.bro_id !== broId) {
           this.openWell(broId);
         }
-      } else if (this.selectedWell()) {
+      } else if (this.selectedWell() || this.highlightedWellId) {
         this.closePanelState();
       }
 
@@ -340,46 +386,45 @@ export class HomeComponent implements OnInit, OnDestroy {
         });
 
         map.addLayer({
-          id: 'wells-circle',
+          id: WELLS_LAYER,
           type: 'circle',
           source: 'wells',
           layout: {
             'circle-sort-key': ['case', ['==', ['get', 'classification'], null], 0, 1],
           },
           paint: {
-            'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 3, 12, 7],
-            'circle-color': [
-              'case',
-              ['==', ['get', 'classification'], null],
-              NO_DATA_COLOR,
-              [
-                'match',
-                ['get', 'classification'],
-                'very_low',
-                CLASSIFICATION_COLORS['very_low'],
-                'low',
-                CLASSIFICATION_COLORS['low'],
-                'normal',
-                CLASSIFICATION_COLORS['normal'],
-                'high',
-                CLASSIFICATION_COLORS['high'],
-                'very_high',
-                CLASSIFICATION_COLORS['very_high'],
-                NO_DATA_COLOR,
-              ],
-            ],
+            'circle-radius': WELL_CIRCLE_RADIUS,
+            'circle-color': WELL_CIRCLE_COLOR,
             'circle-opacity': 1.0,
             'circle-stroke-width': 0,
           },
         });
 
-        map.on('click', 'wells-circle', (e: maplibregl.MapLayerMouseEvent) => this.onWellClick(e));
-        map.on('mouseenter', 'wells-circle', () => {
-          map.getCanvas().style.cursor = 'pointer';
+        map.addLayer({
+          id: WELLS_SELECTED_LAYER,
+          type: 'circle',
+          source: 'wells',
+          filter: ['==', ['get', 'id'], ''],
+          paint: {
+            'circle-radius': SELECTED_WELL_CIRCLE_RADIUS,
+            'circle-color': WELL_CIRCLE_COLOR,
+            'circle-opacity': 1.0,
+            'circle-stroke-width': 2.5,
+            'circle-stroke-color': SELECTED_WELL_STROKE,
+          },
         });
-        map.on('mouseleave', 'wells-circle', () => {
-          map.getCanvas().style.cursor = '';
-        });
+
+        for (const layerId of [WELLS_LAYER, WELLS_SELECTED_LAYER]) {
+          map.on('click', layerId, (e: maplibregl.MapLayerMouseEvent) => this.onWellClick(e));
+          map.on('mouseenter', layerId, () => {
+            map.getCanvas().style.cursor = 'pointer';
+          });
+          map.on('mouseleave', layerId, () => {
+            map.getCanvas().style.cursor = '';
+          });
+        }
+
+        this.highlightWell(this.highlightedWellId);
 
         const well = this.selectedWell();
         if (well) {
@@ -518,6 +563,7 @@ export class HomeComponent implements OnInit, OnDestroy {
     const broId = props['id'];
 
     this.tracking.trackEvent('Map Interaction', 'Well Click', broId);
+    this.highlightWell(broId);
 
     void this.router.navigate([], {
       relativeTo: this.route,
@@ -529,6 +575,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private openWell(broId: string): void {
+    this.highlightWell(broId);
     this.selectedWell.set(null);
     this.series.set(null);
     this.seriesLoading.set(true);
@@ -656,10 +703,26 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private closePanelState(): void {
+    this.highlightWell(null);
     this.selectedWell.set(null);
     this.series.set(null);
     this.showChart.set(false);
     this.seriesLoading.set(false);
+  }
+
+  private highlightWell(broId: string | null): void {
+    this.highlightedWellId = broId;
+    const map = this.map;
+    if (!map?.getLayer(WELLS_SELECTED_LAYER)) return;
+
+    if (broId) {
+      map.setFilter(WELLS_LAYER, ['!=', ['get', 'id'], broId]);
+      map.setFilter(WELLS_SELECTED_LAYER, ['==', ['get', 'id'], broId]);
+      return;
+    }
+
+    map.setFilter(WELLS_LAYER, ['has', 'id']);
+    map.setFilter(WELLS_SELECTED_LAYER, ['==', ['get', 'id'], '']);
   }
 
   formatDate(iso: string | null): string {
