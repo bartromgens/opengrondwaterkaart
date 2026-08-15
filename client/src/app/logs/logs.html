@@ -1,0 +1,74 @@
+<div class="logs-wrapper">
+  <nav class="logs-nav">
+    <a mat-button routerLink="/" class="back-to-map">
+      <mat-icon>arrow_back</mat-icon>
+      Terug naar kaart
+    </a>
+    @if (username(); as name) {
+      <span class="logs-user">{{ name }}</span>
+    }
+  </nav>
+
+  <div class="logs-container">
+    <div class="logs-header">
+      <h1>Logs</h1>
+      <div class="logs-controls">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Bestand</mat-label>
+          <mat-select [value]="selectedFile()" (selectionChange)="onFileChange($event.value)">
+            @for (file of files(); track file.name) {
+              <mat-option [value]="file.name">{{ file.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Regels</mat-label>
+          <mat-select [value]="lineCount()" (selectionChange)="onLineCountChange($event.value)">
+            @for (count of lineOptions; track count) {
+              <mat-option [value]="count">{{ count }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <button mat-stroked-button type="button" (click)="refresh()" [disabled]="refreshing()">
+          <mat-icon>refresh</mat-icon>
+          Vernieuwen
+        </button>
+
+        <mat-slide-toggle [checked]="autoRefresh()" (change)="onAutoRefreshChange($event)">
+          Automatisch verversen
+        </mat-slide-toggle>
+      </div>
+    </div>
+
+    @if (content(); as file) {
+      <p class="logs-meta">
+        {{ formatBytes(file.size) }} · gewijzigd {{ formatModified(file.modified) }}
+        @if (file.truncated) {
+          · laatste {{ file.lines }} regels
+        }
+      </p>
+    }
+
+    @if (error(); as message) {
+      <p class="logs-error">{{ message }}</p>
+    }
+
+    @if (loading()) {
+      <div class="logs-loading">
+        <mat-progress-spinner diameter="36" mode="indeterminate" />
+      </div>
+    } @else if (!files().length) {
+      <p class="logs-empty">Geen logbestanden gevonden.</p>
+    } @else {
+      <div #viewer class="logs-viewer">
+        @for (line of lines(); track $index) {
+          <div [class]="lineClass(line)">{{ line }}</div>
+        } @empty {
+          <div class="logs-empty-file">(leeg)</div>
+        }
+      </div>
+    }
+  </div>
+</div>

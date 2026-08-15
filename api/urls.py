@@ -1,6 +1,9 @@
 from django.urls import path
 
 from .views import (
+    admin_log_content,
+    admin_logs,
+    admin_status,
     health_check,
     meta,
     well_detail,
@@ -18,4 +21,7 @@ urlpatterns = [
     path("wells/<str:bro_id>/", well_detail, name="well-detail"),
     path("wells/<str:bro_id>/series/", well_series, name="well-series"),
     path("meta/", meta, name="meta"),
+    path("admin/status/", admin_status, name="admin-status"),
+    path("admin/logs/", admin_logs, name="admin-logs"),
+    path("admin/logs/<str:name>/", admin_log_content, name="admin-log-content"),
 ]

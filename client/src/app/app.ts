@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { DomSanitizer } from '@angular/platform-browser';
 
+import { AuthService } from './auth.service';
 import { SeoService } from './seo.service';
 
 @Component({
@@ -21,6 +22,7 @@ import { SeoService } from './seo.service';
   styleUrl: './app.scss',
 })
 export class App {
+  readonly auth = inject(AuthService);
   private seo = inject(SeoService);
 
   constructor(matIconRegistry: MatIconRegistry, domSanitizer: DomSanitizer) {

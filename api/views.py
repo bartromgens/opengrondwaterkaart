@@ -6,11 +6,18 @@ from django.contrib.gis.geos import Polygon
 from django.db.models import Count, F, OuterRef, Prefetch, Subquery, Value
 from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
-from rest_framework.decorators import api_view
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from .classification import classify_value
+from .log_files import list_log_files, parse_line_count, read_log_file, resolve_log_file
 from .models import (
     IngestRun,
     IngestRunStatus,
@@ -612,4 +619,37 @@ def meta(request: Request) -> Response:
             ),
             "total_wells": Well.objects.count(),
         }
+    )
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([AllowAny])
+def admin_status(request: Request) -> Response:
+    user = request.user
+    is_staff = bool(user.is_authenticated and user.is_staff)
+    return Response(
+        {
+            "is_staff": is_staff,
+            "username": user.get_username() if is_staff else None,
+        }
+    )
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAdminUser])
+def admin_logs(request: Request) -> Response:
+    return Response({"files": list_log_files()})
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication])
+@permission_classes([IsAdminUser])
+def admin_log_content(request: Request, name: str) -> Response:
+    path = resolve_log_file(name)
+    if path is None:
+        return Response({"error": "Log file not found."}, status=404)
+    return Response(
+        read_log_file(path, parse_line_count(request.query_params.get("lines")))
     )

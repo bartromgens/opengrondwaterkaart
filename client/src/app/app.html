@@ -4,6 +4,9 @@
     <span class="spacer"></span>
     <a mat-button routerLink="/wells" routerLinkActive="active-nav-link">Putten</a>
     <a mat-button routerLink="/about" routerLinkActive="active-nav-link">Over</a>
+    @if (auth.isStaff()) {
+      <a mat-button routerLink="/logs" routerLinkActive="active-nav-link">Logs</a>
+    }
     <a
       mat-icon-button
       href="https://github.com/bartromgens/opengrondwaterkaart"

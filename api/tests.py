@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from django.contrib.gis.geos import Point
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -617,3 +618,81 @@ class WellsStatsViewTests(TestCase):
             sum(row["count"] for row in body["latest_measurement_age_distribution"]),
             0,
         )
+
+
+class AdminLogsViewTests(TestCase):
+    def setUp(self):
+        self.tmp = TemporaryDirectory()
+        self.log_dir = Path(self.tmp.name)
+        (self.log_dir / "management.log").write_text("line1\nline2\nline3\n")
+        (self.log_dir / "django.log").write_text("django\n")
+        (self.log_dir / "secret.lock").write_text("lock\n")
+        (self.log_dir / "notes.txt").write_text("nope\n")
+        self.staff = User.objects.create_user("staff", password="secret", is_staff=True)
+        self.user = User.objects.create_user("user", password="secret")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_status_anonymous(self):
+        response = self.client.get(reverse("admin-status"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"is_staff": False, "username": None})
+
+    def test_status_staff(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse("admin-status"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"is_staff": True, "username": "staff"})
+
+    def test_status_non_staff(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("admin-status"))
+        self.assertEqual(response.json(), {"is_staff": False, "username": None})
+
+    def test_list_requires_staff(self):
+        response = self.client.get(reverse("admin-logs"))
+        self.assertEqual(response.status_code, 403)
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("admin-logs"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_list_returns_log_files_only(self):
+        self.client.force_login(self.staff)
+        with override_settings(LOG_DIR=self.log_dir):
+            response = self.client.get(reverse("admin-logs"))
+        self.assertEqual(response.status_code, 200)
+        names = {item["name"] for item in response.json()["files"]}
+        self.assertEqual(names, {"management.log", "django.log"})
+
+    def test_content_returns_tail(self):
+        self.client.force_login(self.staff)
+        with override_settings(LOG_DIR=self.log_dir):
+            response = self.client.get(
+                reverse("admin-log-content", args=["management.log"]),
+                {"lines": 2},
+            )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["content"], "line2\nline3")
+        self.assertTrue(body["truncated"])
+        self.assertEqual(body["name"], "management.log")
+
+    def test_content_rejects_unknown_and_unsafe_names(self):
+        self.client.force_login(self.staff)
+        with override_settings(LOG_DIR=self.log_dir):
+            missing = self.client.get(
+                reverse("admin-log-content", args=["missing.log"])
+            )
+            lock = self.client.get(reverse("admin-log-content", args=["secret.lock"]))
+            traversal = self.client.get(reverse("admin-log-content", args=[".."]))
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(lock.status_code, 404)
+        self.assertEqual(traversal.status_code, 404)
+
+    def test_content_requires_staff(self):
+        with override_settings(LOG_DIR=self.log_dir):
+            response = self.client.get(
+                reverse("admin-log-content", args=["management.log"])
+            )
+        self.assertEqual(response.status_code, 403)
