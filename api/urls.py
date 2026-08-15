@@ -6,6 +6,7 @@ from .views import (
     admin_status,
     health_check,
     meta,
+    monitoring_networks,
     well_detail,
     well_series,
     wells_geojson,
@@ -15,6 +16,7 @@ from .views import (
 
 urlpatterns = [
     path("health/", health_check, name="health-check"),
+    path("networks/", monitoring_networks, name="monitoring-networks"),
     path("wells/", wells_geojson, name="wells-geojson"),
     path("wells/overview/", wells_overview, name="wells-overview"),
     path("wells/stats/", wells_stats, name="wells-stats"),

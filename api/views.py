@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from typing import Iterable
 
 from django.contrib.gis.geos import Polygon
-from django.db.models import Count, F, OuterRef, Prefetch, Subquery, Value
+from django.db.models import Count, F, OuterRef, Prefetch, Q, QuerySet, Subquery, Value
 from django.db.models.functions import Coalesce, NullIf
 from django.utils import timezone
 from rest_framework.authentication import SessionAuthentication
@@ -55,6 +55,14 @@ def health_check(request: Request) -> Response:
     return Response({"status": "ok"})
 
 
+def _map_wells_queryset() -> QuerySet[Well]:
+    one_year_ago = (timezone.now() - timedelta(days=365)).date()
+    return Well.objects.filter(
+        research_last_date__gte=one_year_ago,
+        measurement_count__gt=0,
+    )
+
+
 def _well_feature(
     well: Well,
     value_m_nap: float | None,
@@ -83,8 +91,11 @@ def wells_geojson(request: Request) -> Response:
     selected_date = _parse_date(request)
     week = _week_of(selected_date)
 
-    one_year_ago = (timezone.now() - timedelta(days=365)).date()
-    qs = Well.objects.filter(research_last_date__gte=one_year_ago)
+    qs = _map_wells_queryset()
+
+    network_param = (request.query_params.get("network") or "").strip()
+    if network_param:
+        qs = qs.filter(monitoring_networks__bro_id=network_param).distinct()
 
     bbox_param = request.query_params.get("bbox")
     if bbox_param:
@@ -130,6 +141,30 @@ def wells_geojson(request: Request) -> Response:
         )
 
     return Response({"type": "FeatureCollection", "features": features})
+
+
+@api_view(["GET"])
+def monitoring_networks(request: Request) -> Response:
+    qs = (
+        MonitoringNetwork.objects.annotate(
+            well_count=Count("wells", filter=Q(wells__in=_map_wells_queryset()))
+        )
+        .filter(well_count__gt=0)
+        .order_by("name", "bro_id")
+    )
+    return Response(
+        {
+            "results": [
+                {
+                    "bro_id": network.bro_id,
+                    "name": network.name or network.bro_id,
+                    "groundwater_aspect": network.groundwater_aspect or None,
+                    "well_count": network.well_count,
+                }
+                for network in qs
+            ]
+        }
+    )
 
 
 class _DictBaseline:

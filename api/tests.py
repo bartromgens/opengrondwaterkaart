@@ -341,6 +341,119 @@ class WellsOverviewViewTests(TestCase):
         self.assertEqual(results[1]["bro_id"], "BRO001")
 
 
+class WellsGeojsonViewTests(TestCase):
+    def test_omits_wells_without_measurements(self):
+        today = timezone.now().date()
+        well_with_data = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=today,
+        )
+        Well.objects.create(
+            bro_id="BRO002",
+            location=Point(5.1, 52.1, srid=4326),
+            research_last_date=today,
+        )
+        Measurement.objects.create(
+            well=well_with_data, measured_on=today, value_m_nap=1.0
+        )
+        refresh_well_measurement_stats()
+
+        response = self.client.get(reverse("wells-geojson"))
+        self.assertEqual(response.status_code, 200)
+        features = response.json()["features"]
+        self.assertEqual([f["properties"]["id"] for f in features], ["BRO001"])
+
+    def test_filters_wells_by_monitoring_network(self):
+        today = timezone.now().date()
+        well_in_network = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=today,
+        )
+        well_other = Well.objects.create(
+            bro_id="BRO002",
+            location=Point(5.1, 52.1, srid=4326),
+            research_last_date=today,
+        )
+        network = MonitoringNetwork.objects.create(
+            bro_id="GMN001", name="Meetnet Noord"
+        )
+        well_in_network.monitoring_networks.add(network)
+        Measurement.objects.create(
+            well=well_in_network, measured_on=today, value_m_nap=1.0
+        )
+        Measurement.objects.create(well=well_other, measured_on=today, value_m_nap=1.1)
+        refresh_well_measurement_stats()
+
+        response = self.client.get(reverse("wells-geojson"), {"network": "GMN001"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [f["properties"]["id"] for f in response.json()["features"]],
+            ["BRO001"],
+        )
+
+    def test_unknown_network_returns_empty_features(self):
+        today = timezone.now().date()
+        well = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=today,
+        )
+        Measurement.objects.create(well=well, measured_on=today, value_m_nap=1.0)
+        refresh_well_measurement_stats()
+
+        response = self.client.get(reverse("wells-geojson"), {"network": "GMN-UNKNOWN"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["features"], [])
+
+
+class MonitoringNetworksViewTests(TestCase):
+    def test_lists_networks_with_map_visible_wells(self):
+        today = timezone.now().date()
+        visible = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=today,
+        )
+        hidden = Well.objects.create(
+            bro_id="BRO002",
+            location=Point(5.1, 52.1, srid=4326),
+            research_last_date=today,
+        )
+        listed = MonitoringNetwork.objects.create(
+            bro_id="GMN001",
+            name="Meetnet Noord",
+            groundwater_aspect="kwantiteit",
+        )
+        MonitoringNetwork.objects.create(
+            bro_id="GMN002",
+            name="Meetnet Zuid",
+        )
+        unused = MonitoringNetwork.objects.create(
+            bro_id="GMN003",
+            name="Leeg meetnet",
+        )
+        visible.monitoring_networks.add(listed)
+        hidden.monitoring_networks.add(unused)
+        Measurement.objects.create(well=visible, measured_on=today, value_m_nap=1.0)
+        refresh_well_measurement_stats()
+
+        response = self.client.get(reverse("monitoring-networks"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["results"],
+            [
+                {
+                    "bro_id": "GMN001",
+                    "name": "Meetnet Noord",
+                    "groundwater_aspect": "kwantiteit",
+                    "well_count": 1,
+                }
+            ],
+        )
+
+
 class _FakeFionaCollection(list):
     """List-based stand-in for a fiona layer collection (supports `with` + len())."""
 

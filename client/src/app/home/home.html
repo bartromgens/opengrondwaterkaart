@@ -10,6 +10,52 @@
   <!-- Selected date overlay -->
   <div class="date-overlay">{{ formatDate(selectedDateIso) }}</div>
 
+  <!-- Meetnet filter -->
+  <div class="network-filter">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="network-field">
+      <mat-label>Meetnet</mat-label>
+      <input
+        matInput
+        type="text"
+        [ngModel]="networkInput()"
+        (ngModelChange)="onNetworkInput($event)"
+        [matAutocomplete]="networkAuto"
+        placeholder="Zoeken…"
+        autocomplete="off"
+      />
+      @if (selectedNetworkId()) {
+        <button
+          matSuffix
+          mat-icon-button
+          type="button"
+          aria-label="Wis meetnetfilter"
+          (click)="clearNetwork($event)"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+      <mat-autocomplete
+        #networkAuto="matAutocomplete"
+        [displayWith]="displayNetwork"
+        (optionSelected)="onNetworkSelected($event)"
+      >
+        @for (network of filteredNetworks(); track network.bro_id) {
+          <mat-option [value]="network">
+            <span class="network-option">
+              <span class="network-option-name">{{ network.name }}</span>
+              <span class="network-option-count">{{ network.well_count }}</span>
+            </span>
+          </mat-option>
+        } @empty {
+          <mat-option disabled>Geen meetnetten gevonden</mat-option>
+        }
+      </mat-autocomplete>
+    </mat-form-field>
+    @if (selectedNetwork(); as network) {
+      <div class="network-filter-meta">{{ network.well_count | number }} putten</div>
+    }
+  </div>
+
   <!-- Legend -->
   <div class="legend">
     <div class="legend-title">Grondwaterstand</div>

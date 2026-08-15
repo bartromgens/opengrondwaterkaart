@@ -11,14 +11,27 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import {
+  MatAutocompleteModule,
+  MatAutocompleteSelectedEvent,
+} from '@angular/material/autocomplete';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSliderModule } from '@angular/material/slider';
 import { Subject } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import * as maplibregl from 'maplibre-gl';
 
-import { WellDetail, WellSeries, WellsService } from '../wells.service';
+import {
+  MonitoringNetworkListItem,
+  WellDetail,
+  WellSeries,
+  WellsGeoJSON,
+  WellsService,
+} from '../wells.service';
 import { WellChartComponent } from '../well-chart-dialog/well-chart-dialog';
 import { TrackingService } from '../tracking.service';
 import { SeoService } from '../seo.service';
@@ -149,8 +162,12 @@ function buildMonthTicks(): { label: string; pct: number; major: boolean }[] {
   imports: [
     CommonModule,
     FormsModule,
-    MatProgressSpinnerModule,
+    MatAutocompleteModule,
+    MatButtonModule,
+    MatFormFieldModule,
     MatIconModule,
+    MatInputModule,
+    MatProgressSpinnerModule,
     MatSliderModule,
     WellChartComponent,
   ],
@@ -175,6 +192,25 @@ export class HomeComponent implements OnInit, OnDestroy {
   dateLoading = signal(false);
   lastUpdated = signal<string | null>(null);
   totalWells = signal(0);
+
+  networks = signal<MonitoringNetworkListItem[]>([]);
+  networkInput = signal('');
+  selectedNetworkId = signal<string | null>(null);
+
+  readonly selectedNetwork = computed(() => {
+    const id = this.selectedNetworkId();
+    return this.networks().find((network) => network.bro_id === id) ?? null;
+  });
+
+  readonly filteredNetworks = computed(() => {
+    const query = this.networkInput().trim().toLowerCase();
+    const list = this.networks();
+    if (!query) return list;
+    return list.filter(
+      (network) =>
+        network.name.toLowerCase().includes(query) || network.bro_id.toLowerCase().includes(query),
+    );
+  });
 
   selectedWell = signal<WellDetail | null>(null);
   seriesLoading = signal(false);
@@ -241,6 +277,8 @@ export class HomeComponent implements OnInit, OnDestroy {
     });
     this.initMap();
     this.loadMeta();
+    this.loadNetworks();
+    this.selectedNetworkId.set(this.route.snapshot.queryParamMap.get('network'));
 
     this.route.queryParamMap.subscribe((params) => {
       const broId = params.get('well');
@@ -250,6 +288,11 @@ export class HomeComponent implements OnInit, OnDestroy {
         }
       } else if (this.selectedWell()) {
         this.closePanelState();
+      }
+
+      const networkId = params.get('network');
+      if (networkId !== this.selectedNetworkId()) {
+        this.applyNetworkFilter(networkId, { fit: !!networkId });
       }
     });
 
@@ -286,7 +329,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   private loadWells(): void {
-    this.wellsService.getWells(this.selectedDateIso).subscribe({
+    this.wellsService.getWells(this.selectedDateIso, this.wellsQuery()).subscribe({
       next: (geojson) => {
         this.loading.set(false);
         const map = this.map!;
@@ -341,33 +384,114 @@ export class HomeComponent implements OnInit, OnDestroy {
         const well = this.selectedWell();
         if (well) {
           this.flyToWell(well);
+        } else if (this.selectedNetworkId()) {
+          this.fitToWells(geojson);
         }
       },
       error: () => this.loading.set(false),
     });
   }
 
-  private onDateChanged(): void {
-    const dateIso = this.selectedDateIso;
+  private wellsQuery(): { network?: string | null } {
+    return { network: this.selectedNetworkId() };
+  }
+
+  private reloadWells(opts?: { fit?: boolean }): void {
     const source = this.map?.getSource('wells') as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
 
     this.dateLoading.set(true);
-    this.wellsService.getWells(dateIso).subscribe({
+    this.wellsService.getWells(this.selectedDateIso, this.wellsQuery()).subscribe({
       next: (geojson) => {
         source.setData(geojson as any);
         this.dateLoading.set(false);
+        if (opts?.fit) {
+          this.fitToWells(geojson);
+        }
       },
       error: () => this.dateLoading.set(false),
     });
+  }
+
+  private onDateChanged(): void {
+    this.reloadWells();
 
     const well = this.selectedWell();
     if (well) {
-      this.wellsService.getWellDetail(well.bro_id, dateIso).subscribe({
+      this.wellsService.getWellDetail(well.bro_id, this.selectedDateIso).subscribe({
         next: (detail) => this.selectedWell.set(detail),
       });
     }
   }
+
+  private applyNetworkFilter(networkId: string | null, opts?: { fit?: boolean }): void {
+    this.selectedNetworkId.set(networkId);
+    const selected = this.selectedNetwork();
+    this.networkInput.set(selected?.name ?? '');
+    this.reloadWells(opts);
+  }
+
+  private fitToWells(geojson: WellsGeoJSON): void {
+    if (!this.map || geojson.features.length === 0) return;
+
+    this.programmaticMove = true;
+    this.map.once('moveend', () => {
+      this.programmaticMove = false;
+    });
+
+    if (geojson.features.length === 1) {
+      const [lng, lat] = geojson.features[0].geometry.coordinates;
+      this.map.flyTo({
+        center: [lng, lat],
+        zoom: Math.max(this.map.getZoom(), 10),
+      });
+      return;
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    for (const feature of geojson.features) {
+      bounds.extend(feature.geometry.coordinates as [number, number]);
+    }
+    this.map.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 800 });
+  }
+
+  onNetworkInput(value: string | MonitoringNetworkListItem): void {
+    if (typeof value === 'string') {
+      this.networkInput.set(value);
+      return;
+    }
+    if (value) {
+      this.networkInput.set(value.name);
+    }
+  }
+
+  onNetworkSelected(event: MatAutocompleteSelectedEvent): void {
+    const network = event.option.value as MonitoringNetworkListItem;
+    this.networkInput.set(network.name);
+    this.tracking.trackEvent('Map Interaction', 'Network Filter', network.bro_id);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { network: network.bro_id },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  clearNetwork(event?: Event): void {
+    event?.stopPropagation();
+    this.networkInput.set('');
+    this.tracking.trackEvent('Map Interaction', 'Network Filter', 'all');
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { network: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  readonly displayNetwork = (network: MonitoringNetworkListItem | string | null): string => {
+    if (!network) return '';
+    if (typeof network === 'string') return network;
+    return network.name;
+  };
 
   onSliderDrag(value: number): void {
     this.sliderValue = value;
@@ -455,6 +579,18 @@ export class HomeComponent implements OnInit, OnDestroy {
       next: (m) => {
         this.lastUpdated.set(m.last_updated);
         this.totalWells.set(m.total_wells);
+      },
+    });
+  }
+
+  private loadNetworks(): void {
+    this.wellsService.getNetworks().subscribe({
+      next: (response) => {
+        this.networks.set(response.results);
+        const selected = this.selectedNetwork();
+        if (selected) {
+          this.networkInput.set(selected.name);
+        }
       },
     });
   }

@@ -36,6 +36,17 @@ export interface MonitoringNetworkInfo {
   bro_object_url: string | null;
 }
 
+export interface MonitoringNetworkListItem {
+  bro_id: string;
+  name: string;
+  groundwater_aspect: string | null;
+  well_count: number;
+}
+
+export interface MonitoringNetworksResponse {
+  results: MonitoringNetworkListItem[];
+}
+
 export interface WellDetail {
   bro_id: string;
   tube_number: number;
@@ -155,12 +166,22 @@ export interface WellsStats {
 export class WellsService {
   private http = inject(HttpClient);
 
-  getWells(date: string, bbox?: [number, number, number, number]): Observable<WellsGeoJSON> {
+  getWells(
+    date: string,
+    opts?: { bbox?: [number, number, number, number]; network?: string | null },
+  ): Observable<WellsGeoJSON> {
     let params = new HttpParams().set('date', date);
-    if (bbox) {
-      params = params.set('bbox', bbox.join(','));
+    if (opts?.bbox) {
+      params = params.set('bbox', opts.bbox.join(','));
+    }
+    if (opts?.network) {
+      params = params.set('network', opts.network);
     }
     return this.http.get<WellsGeoJSON>('/api/wells/', { params });
+  }
+
+  getNetworks(): Observable<MonitoringNetworksResponse> {
+    return this.http.get<MonitoringNetworksResponse>('/api/networks/');
   }
 
   getWellDetail(broId: string, date: string): Observable<WellDetail> {

@@ -1,3 +1,5 @@
+@use '@angular/material' as mat;
+
 .map-layout {
   position: relative;
   width: 100%;
@@ -34,6 +36,50 @@
   font-size: 14px;
   font-weight: 600;
   color: #333;
+}
+
+/* Meetnet filter */
+.network-filter {
+  position: absolute;
+  top: 52px;
+  left: 12px;
+  z-index: 10;
+  width: min(300px, calc(100vw - 72px));
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  padding: 8px 10px 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+
+  @include mat.form-field-density(-4);
+}
+
+.network-field {
+  width: 100%;
+}
+
+.network-filter-meta {
+  font-size: 11px;
+  color: #666;
+  padding: 0 2px 2px;
+}
+
+.network-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+}
+
+.network-option-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.network-option-count {
+  flex-shrink: 0;
+  color: #888;
+  font-size: 12px;
 }
 
 /* Legend */
