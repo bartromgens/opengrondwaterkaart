@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib.gis.geos import Point
@@ -8,16 +10,25 @@ from django.utils import timezone
 
 from .frequency import measurement_frequency, refresh_well_frequencies
 from .measurement_summary import refresh_well_measurement_stats
+from .management.command_lock import exclusive_command_lock
 from .management.commands.bootstrap_wells import LAYER_GLD, LAYER_GMW, LAYER_TUBE
 from .management.commands.fetch_measurements import (
     RECENT_MEASUREMENT_DAYS,
+    Command as FetchMeasurementsCommand,
     _wells_queryset,
 )
 from .management.commands.sync_bro_organizations import (
     Command as SyncOrganizationsCommand,
 )
 from .management.commands.sync_bro_organizations import parse_organizations
-from .models import Measurement, MonitoringNetwork, Organization, Well
+from .models import (
+    IngestRun,
+    IngestRunStatus,
+    Measurement,
+    MonitoringNetwork,
+    Organization,
+    Well,
+)
 
 
 class MeasurementFrequencyTests(TestCase):
@@ -149,6 +160,59 @@ class FetchMeasurementsRecentFilterTests(TestCase):
         bro_ids = set(_wells_queryset().values_list("bro_id", flat=True))
 
         self.assertEqual(bro_ids, {recent.bro_id, older.bro_id, never.bro_id})
+
+
+class CommandLockTests(TestCase):
+    def test_second_acquire_fails_while_held(self):
+        with TemporaryDirectory() as tmp:
+            with override_settings(LOG_DIR=Path(tmp)):
+                with exclusive_command_lock("test_lock") as first:
+                    self.assertTrue(first)
+                    with exclusive_command_lock("test_lock") as second:
+                        self.assertFalse(second)
+                with exclusive_command_lock("test_lock") as third:
+                    self.assertTrue(third)
+
+    def test_fetch_measurements_skips_when_already_running(self):
+        with TemporaryDirectory() as tmp:
+            with override_settings(LOG_DIR=Path(tmp)):
+                with exclusive_command_lock("fetch_measurements"):
+                    with patch.object(
+                        FetchMeasurementsCommand, "_fetch_all_measurements"
+                    ) as mock_fetch:
+                        FetchMeasurementsCommand().handle()
+                        mock_fetch.assert_not_called()
+        self.assertFalse(IngestRun.objects.exists())
+
+    def test_fetch_measurements_skips_when_ingest_run_is_active(self):
+        IngestRun.objects.create(kind="fetch_measurements")
+        with TemporaryDirectory() as tmp:
+            with override_settings(LOG_DIR=Path(tmp)):
+                with patch.object(
+                    FetchMeasurementsCommand, "_fetch_all_measurements"
+                ) as mock_fetch:
+                    FetchMeasurementsCommand().handle()
+                    mock_fetch.assert_not_called()
+        self.assertEqual(IngestRun.objects.count(), 1)
+
+    def test_fetch_measurements_replaces_stale_ingest_run(self):
+        stale = IngestRun.objects.create(kind="fetch_measurements")
+        IngestRun.objects.filter(pk=stale.pk).update(
+            started_at=timezone.now() - timedelta(hours=49)
+        )
+        with TemporaryDirectory() as tmp:
+            with override_settings(LOG_DIR=Path(tmp)):
+                with patch.object(
+                    FetchMeasurementsCommand, "_fetch_all_measurements"
+                ) as mock_fetch:
+                    mock_fetch.return_value = 0
+                    FetchMeasurementsCommand().handle()
+                    mock_fetch.assert_called_once()
+        stale.refresh_from_db()
+        self.assertEqual(stale.status, IngestRunStatus.FAILED)
+        self.assertEqual(
+            IngestRun.objects.filter(status=IngestRunStatus.SUCCESS).count(), 1
+        )
 
 
 class WellsOverviewViewTests(TestCase):

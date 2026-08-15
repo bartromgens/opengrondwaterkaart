@@ -18,6 +18,7 @@ from django.utils import timezone as django_timezone
 
 from api.frequency import refresh_well_frequencies
 from api.measurement_summary import refresh_well_measurement_stats
+from api.management.command_lock import exclusive_command_lock
 from api.management.dev_bbox import filter_wells_by_dev_bbox, write_dev_bbox_notice
 from api.models import IngestRun, IngestRunStatus, Measurement, Well
 
@@ -32,6 +33,7 @@ XLINK_NS = "http://www.w3.org/1999/xlink"
 CHUNK_SIZE = 200
 GLD_OBJECT_TIMEOUT = 120
 RECENT_MEASUREMENT_DAYS = 90
+STALE_RUN_AFTER = timedelta(hours=48)
 logger = logging.getLogger(__name__)
 
 
@@ -410,6 +412,43 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
+        with exclusive_command_lock("fetch_measurements") as acquired:
+            if not acquired:
+                return
+            if self._active_run():
+                return
+            self._run(options)
+
+    def _active_run(self) -> IngestRun | None:
+        running = (
+            IngestRun.objects.filter(
+                kind="fetch_measurements", status=IngestRunStatus.RUNNING
+            )
+            .order_by("-started_at")
+            .first()
+        )
+        if running is None:
+            return None
+        if django_timezone.now() - running.started_at >= STALE_RUN_AFTER:
+            running.status = IngestRunStatus.FAILED
+            running.finished_at = django_timezone.now()
+            running.errors_json = list(running.errors_json or []) + [
+                f"Marked failed: still running after {STALE_RUN_AFTER}."
+            ]
+            running.save(update_fields=["status", "finished_at", "errors_json"])
+            logger.warning(
+                "Stale fetch_measurements run %s started at %s; starting a new run.",
+                running.pk,
+                running.started_at,
+            )
+            return None
+        logger.warning(
+            "fetch_measurements already running since %s; skipping.",
+            running.started_at,
+        )
+        return running
+
+    def _run(self, options: dict[str, Any]) -> None:
         run = IngestRun.objects.create(kind="fetch_measurements")
         errors: list[str] = []
         processed = 0

@@ -92,7 +92,7 @@ crontab -e
 0 4 1 * * /home/bart/opengrondwaterkaart/scripts/monthly_organizations.sh >> /home/bart/opengrondwaterkaart/log/organizations.log 2>&1
 ```
 
-Log output goes to the project's own `log/` directory (already writable by the deploy user), not `/var/log`, which requires root permissions.
+Log output goes to the project's own `log/` directory (already writable by the deploy user), not `/var/log`, which requires root permissions. If a nightly run is still in progress (a full `fetch_measurements` can take more than 24 hours), the next cron invocation and any overlapping `fetch_measurements` command exit immediately instead of starting a second job.
 
 ## Deployment
 
