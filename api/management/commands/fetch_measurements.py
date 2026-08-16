@@ -33,7 +33,6 @@ XLINK_NS = "http://www.w3.org/1999/xlink"
 CHUNK_SIZE = 200
 GLD_OBJECT_TIMEOUT = 120
 RECENT_MEASUREMENT_DAYS = 90
-STALE_RUN_AFTER = timedelta(hours=48)
 logger = logging.getLogger(__name__)
 
 
@@ -415,38 +414,39 @@ class Command(BaseCommand):
         with exclusive_command_lock("fetch_measurements") as acquired:
             if not acquired:
                 return
-            if self._active_run():
-                return
+            self._fail_orphaned_runs()
             self._run(options)
 
-    def _active_run(self) -> IngestRun | None:
-        running = (
+    def _fail_orphaned_runs(self) -> None:
+        running = list(
             IngestRun.objects.filter(
                 kind="fetch_measurements", status=IngestRunStatus.RUNNING
-            )
-            .order_by("-started_at")
-            .first()
+            ).order_by("started_at")
         )
-        if running is None:
-            return None
-        if django_timezone.now() - running.started_at >= STALE_RUN_AFTER:
-            running.status = IngestRunStatus.FAILED
-            running.finished_at = django_timezone.now()
-            running.errors_json = list(running.errors_json or []) + [
-                f"Marked failed: still running after {STALE_RUN_AFTER}."
-            ]
-            running.save(update_fields=["status", "finished_at", "errors_json"])
+        if len(running) > 1:
             logger.warning(
-                "Stale fetch_measurements run %s started at %s; starting a new run.",
-                running.pk,
-                running.started_at,
+                "Found %d orphaned fetch_measurements IngestRun rows while holding "
+                "the exclusive lock (ids=%s); there should never be more than one, "
+                "this suggests the lock previously failed to prevent duplicate runs.",
+                len(running),
+                [run.pk for run in running],
             )
-            return None
-        logger.warning(
-            "fetch_measurements already running since %s; skipping.",
-            running.started_at,
-        )
-        return running
+        now = django_timezone.now()
+        for run in running:
+            run.status = IngestRunStatus.FAILED
+            run.finished_at = now
+            run.errors_json = list(run.errors_json or []) + [
+                "Marked failed: no process holds the command lock "
+                "(killed by deploy, crash, or container restart)."
+            ]
+            run.save(update_fields=["status", "finished_at", "errors_json"])
+            logger.warning(
+                "Orphaned IngestRun id=%s (kind=fetch_measurements, status=running, "
+                "started_at=%s) found while holding exclusive lock; marking failed "
+                "and starting a new run.",
+                run.pk,
+                run.started_at,
+            )
 
     def _run(self, options: dict[str, Any]) -> None:
         run = IngestRun.objects.create(kind="fetch_measurements")

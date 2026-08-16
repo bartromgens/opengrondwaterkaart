@@ -169,8 +169,15 @@ class CommandLockTests(TestCase):
             with override_settings(LOG_DIR=Path(tmp)):
                 with exclusive_command_lock("test_lock") as first:
                     self.assertTrue(first)
-                    with exclusive_command_lock("test_lock") as second:
-                        self.assertFalse(second)
+                    with self.assertLogs(
+                        "api.management.command_lock", level="WARNING"
+                    ) as logs:
+                        with exclusive_command_lock("test_lock") as second:
+                            self.assertFalse(second)
+                    self.assertTrue(
+                        any("test_lock.lock" in message for message in logs.output)
+                    )
+                    self.assertTrue(any("pid=" in message for message in logs.output))
                 with exclusive_command_lock("test_lock") as third:
                     self.assertTrue(third)
 
@@ -185,22 +192,8 @@ class CommandLockTests(TestCase):
                         mock_fetch.assert_not_called()
         self.assertFalse(IngestRun.objects.exists())
 
-    def test_fetch_measurements_skips_when_ingest_run_is_active(self):
-        IngestRun.objects.create(kind="fetch_measurements")
-        with TemporaryDirectory() as tmp:
-            with override_settings(LOG_DIR=Path(tmp)):
-                with patch.object(
-                    FetchMeasurementsCommand, "_fetch_all_measurements"
-                ) as mock_fetch:
-                    FetchMeasurementsCommand().handle()
-                    mock_fetch.assert_not_called()
-        self.assertEqual(IngestRun.objects.count(), 1)
-
-    def test_fetch_measurements_replaces_stale_ingest_run(self):
-        stale = IngestRun.objects.create(kind="fetch_measurements")
-        IngestRun.objects.filter(pk=stale.pk).update(
-            started_at=timezone.now() - timedelta(hours=49)
-        )
+    def test_fetch_measurements_replaces_orphaned_ingest_run(self):
+        orphaned = IngestRun.objects.create(kind="fetch_measurements")
         with TemporaryDirectory() as tmp:
             with override_settings(LOG_DIR=Path(tmp)):
                 with patch.object(
@@ -209,10 +202,28 @@ class CommandLockTests(TestCase):
                     mock_fetch.return_value = 0
                     FetchMeasurementsCommand().handle()
                     mock_fetch.assert_called_once()
-        stale.refresh_from_db()
-        self.assertEqual(stale.status, IngestRunStatus.FAILED)
+        orphaned.refresh_from_db()
+        self.assertEqual(orphaned.status, IngestRunStatus.FAILED)
         self.assertEqual(
             IngestRun.objects.filter(status=IngestRunStatus.SUCCESS).count(), 1
+        )
+
+    def test_fetch_measurements_warns_on_multiple_orphaned_ingest_runs(self):
+        IngestRun.objects.create(kind="fetch_measurements")
+        IngestRun.objects.create(kind="fetch_measurements")
+        with TemporaryDirectory() as tmp:
+            with override_settings(LOG_DIR=Path(tmp)):
+                with patch.object(
+                    FetchMeasurementsCommand, "_fetch_all_measurements"
+                ) as mock_fetch:
+                    mock_fetch.return_value = 0
+                    with self.assertLogs(
+                        "api.management.commands.fetch_measurements", level="WARNING"
+                    ) as logs:
+                        FetchMeasurementsCommand().handle()
+        self.assertTrue(any("more than one" in message for message in logs.output))
+        self.assertEqual(
+            IngestRun.objects.filter(status=IngestRunStatus.FAILED).count(), 2
         )
 
 
