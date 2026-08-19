@@ -126,6 +126,10 @@
   border-radius: 50%;
   flex-shrink: 0;
 
+  &.no-classification {
+    background: #90a4ae;
+  }
+
   &.no-data {
     background: #cccccc;
   }
@@ -316,6 +320,12 @@ $slider-track-start: $slider-margin + $slider-end-offset;
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.no-classification-badge {
+  background: #90a4ae;
+  color: #fff;
+  font-weight: 500;
 }
 
 .no-data-badge {

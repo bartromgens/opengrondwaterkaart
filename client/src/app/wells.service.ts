@@ -9,6 +9,7 @@ export interface WellProperties {
   classification: Classification | null;
   percentile: number | null;
   value_m_nap: number | null;
+  measured: 0 | 1;
   measured_on: string | null;
 }
 

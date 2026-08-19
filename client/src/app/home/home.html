@@ -95,6 +95,10 @@
       </div>
     }
     <div class="legend-item">
+      <span class="legend-dot no-classification"></span>
+      <span>Geen classificatie</span>
+    </div>
+    <div class="legend-item">
       <span class="legend-dot no-data"></span>
       <span>Geen meting op deze dag</span>
     </div>
@@ -107,7 +111,7 @@
       type="date"
       [value]="selectedDateIso"
       [min]="''"
-      [max]="selectedDateIso"
+      [max]="todayIso"
       (change)="onDateInput($any($event.target).value)"
     />
     <div class="slider-wrap">
@@ -163,6 +167,8 @@
         >
           {{ classificationLabels[selectedWell()!.status.classification!] }}
         </div>
+      } @else if (selectedWell()!.status.value_m_nap !== null) {
+        <div class="panel-classification no-classification-badge">Geen classificatie</div>
       } @else {
         <div class="panel-classification no-data-badge">
           Geen meting op {{ formatDate(selectedDateIso) }}

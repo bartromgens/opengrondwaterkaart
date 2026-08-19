@@ -28,7 +28,9 @@ from .models import (
     Measurement,
     MonitoringNetwork,
     Organization,
+    PeriodType,
     Well,
+    WellBaseline,
 )
 
 
@@ -486,6 +488,98 @@ class WellsGeojsonViewTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["features"], [])
+
+
+def _create_weekly_baseline(well: Well, measured_on: date) -> WellBaseline:
+    week = measured_on.isocalendar()[1]
+    return WellBaseline.objects.create(
+        well=well,
+        period_type=PeriodType.WEEK,
+        period_index=week,
+        p5=0.5,
+        p10=0.8,
+        p25=1.0,
+        p50=1.2,
+        p75=1.4,
+        p90=1.6,
+        p95=1.8,
+        mean=1.2,
+        std=0.3,
+        sample_count=10,
+        baseline_start=date(2015, 1, 1),
+        baseline_end=date(2024, 1, 1),
+    )
+
+
+class WellsGeojsonClassificationTests(TestCase):
+    def _well_with_measurement(self, measured_on: date) -> Well:
+        well = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=measured_on,
+        )
+        Measurement.objects.create(well=well, measured_on=measured_on, value_m_nap=1.0)
+        refresh_well_measurement_stats()
+        return well
+
+    def test_keeps_measurement_when_baseline_is_missing(self):
+        today = timezone.localdate()
+        self._well_with_measurement(today)
+
+        response = self.client.get(
+            reverse("wells-geojson"), {"date": today.isoformat()}
+        )
+        self.assertEqual(response.status_code, 200)
+        props = response.json()["features"][0]["properties"]
+        self.assertEqual(props["value_m_nap"], 1.0)
+        self.assertEqual(props["measured"], 1)
+        self.assertEqual(props["measured_on"], today.isoformat())
+        self.assertIsNone(props["classification"])
+
+    def test_classifies_measurement_when_baseline_exists(self):
+        today = timezone.localdate()
+        well = self._well_with_measurement(today)
+        _create_weekly_baseline(well, today)
+
+        response = self.client.get(
+            reverse("wells-geojson"), {"date": today.isoformat()}
+        )
+        props = response.json()["features"][0]["properties"]
+        self.assertEqual(props["value_m_nap"], 1.0)
+        self.assertEqual(props["measured"], 1)
+        self.assertEqual(props["classification"], "normal")
+
+
+class WellDetailMeasurementTests(TestCase):
+    def test_returns_value_without_classification_when_baseline_is_missing(self):
+        today = timezone.localdate()
+        well = Well.objects.create(
+            bro_id="BRO001", location=Point(5.0, 52.0, srid=4326)
+        )
+        Measurement.objects.create(well=well, measured_on=today, value_m_nap=1.0)
+
+        response = self.client.get(
+            reverse("well-detail", args=["BRO001"]), {"date": today.isoformat()}
+        )
+        status = response.json()["status"]
+        self.assertEqual(status["value_m_nap"], 1.0)
+        self.assertEqual(status["measured_on"], today.isoformat())
+        self.assertIsNone(status["classification"])
+
+    def test_classifies_when_baseline_exists(self):
+        today = timezone.localdate()
+        well = Well.objects.create(
+            bro_id="BRO001", location=Point(5.0, 52.0, srid=4326)
+        )
+        Measurement.objects.create(well=well, measured_on=today, value_m_nap=1.0)
+        _create_weekly_baseline(well, today)
+
+        response = self.client.get(
+            reverse("well-detail", args=["BRO001"]), {"date": today.isoformat()}
+        )
+        status = response.json()["status"]
+        self.assertEqual(status["value_m_nap"], 1.0)
+        self.assertEqual(status["classification"], "normal")
 
 
 class MonitoringNetworksViewTests(TestCase):

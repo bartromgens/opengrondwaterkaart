@@ -47,30 +47,38 @@ const CLASSIFICATION_COLORS: Record<string, string> = {
 };
 
 const NO_DATA_COLOR = '#cccccc';
+const NO_CLASSIFICATION_COLOR = '#90a4ae';
 const SELECTED_WELL_STROKE = '#111111';
 
 const WELLS_LAYER = 'wells-circle';
 const WELLS_SELECTED_LAYER = 'wells-selected';
 
+const CLASSIFIED_CIRCLE_COLOR: maplibregl.ExpressionSpecification = [
+  'match',
+  ['get', 'classification'],
+  'very_low',
+  CLASSIFICATION_COLORS['very_low'],
+  'low',
+  CLASSIFICATION_COLORS['low'],
+  'normal',
+  CLASSIFICATION_COLORS['normal'],
+  'high',
+  CLASSIFICATION_COLORS['high'],
+  'very_high',
+  CLASSIFICATION_COLORS['very_high'],
+  NO_CLASSIFICATION_COLOR,
+];
+
 const WELL_CIRCLE_COLOR: maplibregl.ExpressionSpecification = [
   'case',
-  ['==', ['get', 'classification'], null],
-  NO_DATA_COLOR,
+  ['==', ['to-number', ['get', 'measured']], 1],
   [
-    'match',
-    ['get', 'classification'],
-    'very_low',
-    CLASSIFICATION_COLORS['very_low'],
-    'low',
-    CLASSIFICATION_COLORS['low'],
-    'normal',
-    CLASSIFICATION_COLORS['normal'],
-    'high',
-    CLASSIFICATION_COLORS['high'],
-    'very_high',
-    CLASSIFICATION_COLORS['very_high'],
-    NO_DATA_COLOR,
+    'case',
+    ['==', ['typeof', ['get', 'classification']], 'string'],
+    CLASSIFIED_CIRCLE_COLOR,
+    NO_CLASSIFICATION_COLOR,
   ],
+  NO_DATA_COLOR,
 ];
 
 const WELL_CIRCLE_RADIUS: maplibregl.ExpressionSpecification = [
@@ -141,9 +149,14 @@ interface WellSpec {
 
 const NO_VALUE = '—';
 
+function parseIsoDate(iso: string): Date {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 function formatIsoDate(iso: string | null): string {
   if (!iso) return NO_VALUE;
-  return new Date(iso).toLocaleDateString('nl-NL', {
+  return parseIsoDate(iso).toLocaleDateString('nl-NL', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -172,7 +185,10 @@ function formatInitialFunction(code: string | null): string {
 }
 
 function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(d: Date, n: number): Date {
@@ -327,6 +343,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   readonly classificationLabels = CLASSIFICATION_LABELS;
   readonly noDataColor = NO_DATA_COLOR;
   readonly monthTicks = buildMonthTicks();
+  readonly todayIso = toIso(TODAY);
 
   /** Slider index: 0 = RANGE_START, TOTAL_DAYS = today */
   sliderValue = JAN_FIRST_DAYS;
@@ -425,7 +442,14 @@ export class HomeComponent implements OnInit, OnDestroy {
           type: 'circle',
           source: 'wells',
           layout: {
-            'circle-sort-key': ['case', ['==', ['get', 'classification'], null], 0, 1],
+            'circle-sort-key': [
+              'case',
+              ['==', ['typeof', ['get', 'classification']], 'string'],
+              2,
+              ['==', ['to-number', ['get', 'measured']], 1],
+              1,
+              0,
+            ],
           },
           paint: {
             'circle-radius': WELL_CIRCLE_RADIUS,
@@ -619,10 +643,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   }
 
   onDateInput(value: string): void {
-    const d = new Date(value);
+    if (!value) return;
+    const d = parseIsoDate(value);
     if (isNaN(d.getTime())) return;
-    d.setHours(0, 0, 0, 0);
-    const days = Math.round((d.getTime() - RANGE_START.getTime()) / 86400000);
+    const days = daysFromRangeStart(d);
     this.sliderValue = Math.max(0, Math.min(TOTAL_DAYS, days));
     this.dateChange$.next();
   }

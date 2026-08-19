@@ -80,6 +80,7 @@ def _well_feature(
             "classification": classification,
             "percentile": percentile,
             "value_m_nap": value_m_nap,
+            "measured": 1 if value_m_nap is not None else 0,
             "measured_on": (
                 selected_date.isoformat() if value_m_nap is not None else None
             ),
