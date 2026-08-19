@@ -203,7 +203,7 @@
         </ul>
       }
 
-      @if (selectedWell()!.owner || selectedWell()!.bronhouder || selectedWell()!.bro_object_url) {
+      @if (selectedWell()!.owner || selectedWell()!.bronhouder) {
         <div class="panel-section-label">Beheer</div>
         <div class="panel-management">
           @if (selectedWell()!.bronhouder) {
@@ -222,29 +222,11 @@
               }}</span>
             </div>
           }
-          @if (selectedWell()!.bro_object_url) {
-            <a
-              class="management-bro-link"
-              [href]="selectedWell()!.bro_object_url!"
-              target="_blank"
-              rel="noopener"
-              >BRO-registratie bekijken</a
-            >
-          }
-          <p class="management-note">
-            Voor ontbrekende of onjuiste putgegevens: neem contact op met de bronhouder of het
-            <a
-              href="https://basisregistratieondergrond.nl/service-contact/"
-              target="_blank"
-              rel="noopener"
-              >BRO-helpdesk</a
-            >.
-          </p>
         </div>
       }
 
       @if (selectedWell()!.baseline) {
-        <div class="panel-section-label">Historische bandbreedte (week van selectie)</div>
+        <div class="panel-section-label">Historische bandbreedte</div>
         <div class="baseline-bar">
           <span class="baseline-label">P10</span>
           <span class="baseline-value">{{ formatValue(selectedWell()!.baseline!.p10) }}</span>

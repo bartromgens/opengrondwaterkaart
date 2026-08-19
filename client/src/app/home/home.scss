@@ -377,32 +377,6 @@ $slider-track-start: $slider-margin + $slider-end-offset;
   text-align: right;
 }
 
-.management-bro-link {
-  font-size: 12px;
-  color: #2a5db0;
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
-}
-
-.management-note {
-  font-size: 11px;
-  color: #999;
-  margin: 4px 0 0;
-  line-height: 1.4;
-
-  a {
-    color: #2a5db0;
-    text-decoration: none;
-
-    &:hover {
-      text-decoration: underline;
-    }
-  }
-}
-
 .network-list {
   list-style: none;
   margin: 0;
