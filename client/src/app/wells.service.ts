@@ -168,7 +168,11 @@ export class WellsService {
 
   getWells(
     date: string,
-    opts?: { bbox?: [number, number, number, number]; network?: string | null },
+    opts?: {
+      bbox?: [number, number, number, number];
+      network?: string | null;
+      frequency?: MeasurementFrequency | 'unknown' | null;
+    },
   ): Observable<WellsGeoJSON> {
     let params = new HttpParams().set('date', date);
     if (opts?.bbox) {
@@ -176,6 +180,9 @@ export class WellsService {
     }
     if (opts?.network) {
       params = params.set('network', opts.network);
+    }
+    if (opts?.frequency) {
+      params = params.set('frequency', opts.frequency);
     }
     return this.http.get<WellsGeoJSON>('/api/wells/', { params });
   }

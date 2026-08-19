@@ -418,6 +418,75 @@ class WellsGeojsonViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["features"], [])
 
+    def test_filters_wells_by_measurement_frequency(self):
+        today = timezone.now().date()
+        weekly_well = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=today,
+            measurement_frequency="weekly",
+        )
+        daily_well = Well.objects.create(
+            bro_id="BRO002",
+            location=Point(5.1, 52.1, srid=4326),
+            research_last_date=today,
+            measurement_frequency="daily",
+        )
+        Measurement.objects.create(well=weekly_well, measured_on=today, value_m_nap=1.0)
+        Measurement.objects.create(well=daily_well, measured_on=today, value_m_nap=1.1)
+        refresh_well_measurement_stats()
+
+        response = self.client.get(reverse("wells-geojson"), {"frequency": "weekly"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [f["properties"]["id"] for f in response.json()["features"]],
+            ["BRO001"],
+        )
+
+    def test_unknown_frequency_filters_wells_without_frequency(self):
+        today = timezone.now().date()
+        unknown_well = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=today,
+            measurement_frequency=None,
+        )
+        weekly_well = Well.objects.create(
+            bro_id="BRO002",
+            location=Point(5.1, 52.1, srid=4326),
+            research_last_date=today,
+            measurement_frequency="weekly",
+        )
+        Measurement.objects.create(
+            well=unknown_well, measured_on=today, value_m_nap=1.0
+        )
+        Measurement.objects.create(well=weekly_well, measured_on=today, value_m_nap=1.1)
+        refresh_well_measurement_stats()
+
+        response = self.client.get(reverse("wells-geojson"), {"frequency": "unknown"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [f["properties"]["id"] for f in response.json()["features"]],
+            ["BRO001"],
+        )
+
+    def test_invalid_frequency_returns_empty_features(self):
+        today = timezone.now().date()
+        well = Well.objects.create(
+            bro_id="BRO001",
+            location=Point(5.0, 52.0, srid=4326),
+            research_last_date=today,
+            measurement_frequency="weekly",
+        )
+        Measurement.objects.create(well=well, measured_on=today, value_m_nap=1.0)
+        refresh_well_measurement_stats()
+
+        response = self.client.get(
+            reverse("wells-geojson"), {"frequency": "not-a-frequency"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["features"], [])
+
 
 class MonitoringNetworksViewTests(TestCase):
     def test_lists_networks_with_map_visible_wells(self):

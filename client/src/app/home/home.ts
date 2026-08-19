@@ -20,12 +20,14 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSliderModule } from '@angular/material/slider';
 import { Subject } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import * as maplibregl from 'maplibre-gl';
 
 import {
+  MeasurementFrequency,
   MonitoringNetworkListItem,
   WellDetail,
   WellSeries,
@@ -111,6 +113,26 @@ const GROUNDWATER_ASPECT_LABELS: Record<string, string> = {
   kwaliteit: 'Kwaliteit',
   combinatie: 'Combinatie',
 };
+
+const FREQUENCY_LABELS: Record<MeasurementFrequency, string> = {
+  daily: 'Dagelijks',
+  weekly: 'Wekelijks',
+  monthly: 'Maandelijks',
+  quarterly: 'Per kwartaal',
+  yearly: 'Jaarlijks',
+  irregular: 'Onregelmatig',
+};
+
+const FREQUENCY_OPTIONS: MeasurementFrequency[] = [
+  'daily',
+  'weekly',
+  'monthly',
+  'quarterly',
+  'yearly',
+  'irregular',
+];
+
+type FrequencyFilter = MeasurementFrequency | 'unknown';
 
 interface WellSpec {
   label: string;
@@ -213,6 +235,7 @@ function buildMonthTicks(): { label: string; pct: number; major: boolean }[] {
     MatIconModule,
     MatInputModule,
     MatProgressSpinnerModule,
+    MatSelectModule,
     MatSliderModule,
     WellChartComponent,
   ],
@@ -242,6 +265,10 @@ export class HomeComponent implements OnInit, OnDestroy {
   networks = signal<MonitoringNetworkListItem[]>([]);
   networkInput = signal('');
   selectedNetworkId = signal<string | null>(null);
+  selectedFrequency = signal<FrequencyFilter | null>(null);
+
+  readonly frequencyOptions = FREQUENCY_OPTIONS;
+  readonly frequencyLabels = FREQUENCY_LABELS;
 
   readonly selectedNetwork = computed(() => {
     const id = this.selectedNetworkId();
@@ -325,6 +352,9 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.loadMeta();
     this.loadNetworks();
     this.selectedNetworkId.set(this.route.snapshot.queryParamMap.get('network'));
+    this.selectedFrequency.set(
+      this.parseFrequencyParam(this.route.snapshot.queryParamMap.get('frequency')),
+    );
 
     this.route.queryParamMap.subscribe((params) => {
       const broId = params.get('well');
@@ -339,6 +369,11 @@ export class HomeComponent implements OnInit, OnDestroy {
       const networkId = params.get('network');
       if (networkId !== this.selectedNetworkId()) {
         this.applyNetworkFilter(networkId, { fit: !!networkId });
+      }
+
+      const frequency = this.parseFrequencyParam(params.get('frequency'));
+      if (frequency !== this.selectedFrequency()) {
+        this.applyFrequencyFilter(frequency, { fit: !!frequency });
       }
     });
 
@@ -429,7 +464,7 @@ export class HomeComponent implements OnInit, OnDestroy {
         const well = this.selectedWell();
         if (well) {
           this.flyToWell(well);
-        } else if (this.selectedNetworkId()) {
+        } else if (this.hasActiveMapFilter()) {
           this.fitToWells(geojson);
         }
       },
@@ -437,8 +472,27 @@ export class HomeComponent implements OnInit, OnDestroy {
     });
   }
 
-  private wellsQuery(): { network?: string | null } {
-    return { network: this.selectedNetworkId() };
+  private wellsQuery(): {
+    network?: string | null;
+    frequency?: FrequencyFilter | null;
+  } {
+    return {
+      network: this.selectedNetworkId(),
+      frequency: this.selectedFrequency(),
+    };
+  }
+
+  private hasActiveMapFilter(): boolean {
+    return !!this.selectedNetworkId() || !!this.selectedFrequency();
+  }
+
+  private parseFrequencyParam(raw: string | null): FrequencyFilter | null {
+    if (!raw) return null;
+    if (raw === 'unknown') return 'unknown';
+    if ((FREQUENCY_OPTIONS as readonly string[]).includes(raw)) {
+      return raw as MeasurementFrequency;
+    }
+    return null;
   }
 
   private reloadWells(opts?: { fit?: boolean }): void {
@@ -473,6 +527,11 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.selectedNetworkId.set(networkId);
     const selected = this.selectedNetwork();
     this.networkInput.set(selected?.name ?? '');
+    this.reloadWells(opts);
+  }
+
+  private applyFrequencyFilter(frequency: FrequencyFilter | null, opts?: { fit?: boolean }): void {
+    this.selectedFrequency.set(frequency);
     this.reloadWells(opts);
   }
 
@@ -530,6 +589,19 @@ export class HomeComponent implements OnInit, OnDestroy {
       queryParams: { network: null },
       queryParamsHandling: 'merge',
     });
+  }
+
+  onFrequencySelected(frequency: FrequencyFilter | null): void {
+    this.tracking.trackEvent('Map Interaction', 'Frequency Filter', frequency ?? 'all');
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { frequency: frequency },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  clearFrequency(): void {
+    this.onFrequencySelected(null);
   }
 
   readonly displayNetwork = (network: MonitoringNetworkListItem | string | null): string => {

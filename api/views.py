@@ -22,6 +22,7 @@ from .models import (
     IngestRun,
     IngestRunStatus,
     Measurement,
+    MeasurementFrequency,
     MonitoringNetwork,
     Organization,
     PeriodType,
@@ -96,6 +97,16 @@ def wells_geojson(request: Request) -> Response:
     network_param = (request.query_params.get("network") or "").strip()
     if network_param:
         qs = qs.filter(monitoring_networks__bro_id=network_param).distinct()
+
+    frequency_param = (request.query_params.get("frequency") or "").strip()
+    if frequency_param:
+        valid_frequencies = {choice.value for choice in MeasurementFrequency}
+        if frequency_param == "unknown":
+            qs = qs.filter(measurement_frequency__isnull=True)
+        elif frequency_param in valid_frequencies:
+            qs = qs.filter(measurement_frequency=frequency_param)
+        else:
+            qs = qs.none()
 
     bbox_param = request.query_params.get("bbox")
     if bbox_param:
